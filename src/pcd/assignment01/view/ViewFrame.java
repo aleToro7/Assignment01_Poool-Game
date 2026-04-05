@@ -1,4 +1,4 @@
-package pcd.sketch01;
+package pcd.assignment01.view;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -8,6 +8,8 @@ import java.awt.RenderingHints;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import javax.swing.*;
+import pcd.assignment01.util.RenderSynch;
+import pcd.assignment01.model.P2d;
 
 public class ViewFrame extends JFrame {
     

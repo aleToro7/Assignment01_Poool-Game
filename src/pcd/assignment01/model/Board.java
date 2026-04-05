@@ -1,6 +1,7 @@
-package pcd.sketch01;
+package pcd.assignment01.model;
 
 import java.util.*;
+import pcd.assignment01.util.*;
 
 public class Board {
 

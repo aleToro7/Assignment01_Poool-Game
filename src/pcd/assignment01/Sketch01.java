@@ -1,10 +1,14 @@
 package pcd.assignment01;
 
+import pcd.assignment01.model.Board;
+import pcd.assignment01.model.V2d;
+import pcd.assignment01.util.MinimalBoardConf;
+import pcd.assignment01.view.View;
+import pcd.assignment01.view.ViewModel;
+
 import java.util.Random;
 
 public class Sketch01 {
-
-	
 	public static void main(String[] argv) {
 
 		/* 

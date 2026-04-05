@@ -1,4 +1,7 @@
-package pcd.sketch01;
+package pcd.assignment01.view;
+
+import pcd.assignment01.model.Board;
+import pcd.assignment01.model.P2d;
 
 import java.util.ArrayList;
 

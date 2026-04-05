@@ -1,4 +1,4 @@
-package pcd.sketch01;
+package pcd.assignment01.model;
 
 public record P2d(double x, double y)  {
 

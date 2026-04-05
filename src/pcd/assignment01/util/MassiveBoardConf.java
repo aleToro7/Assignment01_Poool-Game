@@ -1,7 +1,11 @@
-package pcd.sketch01;
+package pcd.assignment01.util;
 
 import java.util.ArrayList;
 import java.util.List;
+import pcd.assignment01.model.Ball;
+import pcd.assignment01.model.Boundary;
+import pcd.assignment01.model.P2d;
+import pcd.assignment01.model.V2d;
 
 public class MassiveBoardConf implements BoardConf {
 
