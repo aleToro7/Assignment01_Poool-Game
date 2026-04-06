@@ -10,23 +10,30 @@ import pcd.assignment01.model.V2d;
 public class MinimalBoardConf implements BoardConf {
 
 	@Override
-	public Ball getPlayerBall() {
-    	return new Ball(new P2d(0, 0), 0.06, 1, new V2d(0,0.5)); 
+	public Ball getPlayer1() {
+		// Posizionato nella metà di sinistra (x = -0.5), un po' più in basso (y = -0.5)
+		return new Ball(new P2d(-0.5, -0.5), 0.06, 1, new V2d(0,0.5));
 	}
 
 	@Override
-	public List<Ball> getSmallBalls() {		
-        var balls = new ArrayList<Ball>();
-    	var b1 = new Ball(new P2d(0, 0.5), 0.05, 0.75, new V2d(0,0));
-    	var b2 = new Ball(new P2d(0.05, 0.55), 0.025, 0.25, new V2d(0,0));
-    	balls.add(b1);
-    	balls.add(b2);
-    	return balls;
+	public Ball getPlayer2() {
+		// Posizionato nella metà di destra (x = 0.5), un po' più in basso (y = -0.5)
+		return new Ball(new P2d(0.5, -0.5), 0.06, 1, new V2d(0,0.5));
+	}
+
+	@Override
+	public List<Ball> getSmallBalls() {
+		var balls = new ArrayList<Ball>();
+		var b1 = new Ball(new P2d(0, 0.5), 0.05, 0.75, new V2d(0,0));
+		var b2 = new Ball(new P2d(0.05, 0.55), 0.025, 0.25, new V2d(0,0));
+		balls.add(b1);
+		balls.add(b2);
+		return balls;
 	}
 
 	@Override
 	public Boundary getBoardBoundary() {
-        return new Boundary(-1.5,-1.0,1.5,1.0);
+		return new Boundary(-1.5,-1.0,1.5,1.0);
 	}
 
 }
