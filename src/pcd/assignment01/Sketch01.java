@@ -2,22 +2,18 @@ package pcd.assignment01;
 
 import pcd.assignment01.model.Board;
 import pcd.assignment01.model.V2d;
-import pcd.assignment01.util.MinimalBoardConf;
+//import pcd.assignment01.util.MinimalBoardConf;
 import pcd.assignment01.util.LargeBoardConf;
 // import pcd.assignment01.util.MassiveBoardConf;
 import pcd.assignment01.view.View;
 import pcd.assignment01.view.ViewModel;
 
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.util.Random;
 
 public class Sketch01 {
 	public static void main(String[] argv) {
-
-		/* * Different board configs to try:
-		 * - minimal: 2 small balls
-		 * - large: 400 small balls
-		 * - massive: 4500 small balls
-		 */
 
 		var boardConf = new LargeBoardConf();
 
@@ -40,25 +36,42 @@ public class Sketch01 {
 
 		var rand = new Random(2);
 
-		// Variabili per tenere traccia dell'ultimo "calcio" di ogni giocatore
-		long lastKickTimeP1 = t0;
+		// Ci serve solo il timer del bot (Giocatore 2)
 		long lastKickTimeP2 = t0;
+
+		// Controlli da tastiera per il Giocatore (H) --> quello controllato da noi
+		view.addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyPressed(KeyEvent e) {
+				if (p1 != null) {
+					double speed = 1.5; // potenza tiro
+
+					// Controlliamo quale freccia è stata premuta
+					switch (e.getKeyCode()) {
+						case KeyEvent.VK_UP:
+							p1.kick(new V2d(0, speed)); // Impulso verso l'alto
+							break;
+						case KeyEvent.VK_DOWN:
+							p1.kick(new V2d(0, -speed)); // Impulso verso il basso
+							break;
+						case KeyEvent.VK_LEFT:
+							p1.kick(new V2d(-speed, 0)); // Impulso a sinistra
+							break;
+						case KeyEvent.VK_RIGHT:
+							p1.kick(new V2d(speed, 0)); // Impulso a destra
+							break;
+					}
+				}
+			}
+		});
 
 		/* main simulation loop */
 
 		while (true){
 
-			/* Se la palla del giocatore 1 è ferma e sono passati 2 secondi, diamo un calcio */
-			if (p1 != null && p1.getVel().abs() < 0.05 && System.currentTimeMillis() - lastKickTimeP1 > 2000) {
-				var angle = rand.nextDouble()*Math.PI*0.25; // Angolo verso l'alto a destra
-				var v = new V2d(Math.cos(angle),Math.sin(angle)).mul(1.5);
-				p1.kick(v);
-				lastKickTimeP1 = System.currentTimeMillis();
-			}
-
-			/* Facciamo la stessa cosa per il giocatore 2 */
+			/* Il Giocatore 1 (H) è controllato.
+			 * Manteniamo il timer automatico per far muovere il Giocatore 2 / Bot (B) */
 			if (p2 != null && p2.getVel().abs() < 0.05 && System.currentTimeMillis() - lastKickTimeP2 > 2000) {
-				// Facciamo tirare il giocatore 2 in una direzione leggermente diversa
 				var angle = rand.nextDouble()*Math.PI*0.25 + Math.PI*0.75;
 				var v = new V2d(Math.cos(angle),Math.sin(angle)).mul(1.5);
 				p2.kick(v);
@@ -91,5 +104,4 @@ public class Sketch01 {
 			Thread.sleep(2000);
 		} catch (Exception ex) {}
 	}
-
 }

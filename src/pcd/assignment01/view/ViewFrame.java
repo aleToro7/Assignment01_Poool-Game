@@ -27,12 +27,8 @@ public class ViewFrame extends JFrame {
 		panel = new VisualiserPanel(w,h);
 		getContentPane().add(panel);
 		addWindowListener(new WindowAdapter(){
-			public void windowClosing(WindowEvent ev){
-				System.exit(-1);
-			}
-			public void windowClosed(WindowEvent ev){
-				System.exit(-1);
-			}
+			public void windowClosing(WindowEvent ev){ System.exit(-1); }
+			public void windowClosed(WindowEvent ev){ System.exit(-1); }
 		});
 	}
 
@@ -65,37 +61,30 @@ public class ViewFrame extends JFrame {
 			g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 			g2.clearRect(0,0,this.getWidth(),this.getHeight());
 
-			// 1. Disegno le linee del campo (griglia a croce)
 			g2.setColor(Color.LIGHT_GRAY);
 			g2.setStroke(new BasicStroke(1));
 			g2.drawLine(ox,0,ox,oy*2);
 			g2.drawLine(0,oy,ox*2,oy);
 
-			// 2. Disegno le Buche (angoli in alto a sinistra e in alto a destra)
 			g2.setColor(Color.BLACK);
-			int holeRadius = 100; // Grandezza della buca (modificabile)
-			// Buca sinistra (quarto di cerchio nell'angolo 0,0)
+			int holeRadius = 100;
 			g2.fillArc(-holeRadius, -holeRadius, holeRadius*2, holeRadius*2, 270, 90);
-			// Buca destra (quarto di cerchio nell'angolo larghezza, 0)
 			g2.fillArc(getWidth() - holeRadius, -holeRadius, holeRadius*2, holeRadius*2, 180, 90);
 
-			// 3. Disegno i Punteggi in blu
 			g2.setColor(Color.BLUE);
-			g2.setFont(new Font("Arial", Font.PLAIN, 120)); // Font grande per i numeri
-			FontMetrics fm = g2.getFontMetrics();
+			g2.setFont(new Font("Arial", Font.PLAIN, 120));
+			FontMetrics fmScore = g2.getFontMetrics();
 
 			String score1Str = String.valueOf(model.getScore1());
 			String score2Str = String.valueOf(model.getScore2());
 
-			// Posiziono i punteggi centrati nei due quadranti inferiori
-			int score1X = (ox / 2) - (fm.stringWidth(score1Str) / 2);
-			int score2X = (ox + (ox / 2)) - (fm.stringWidth(score2Str) / 2);
-			int scoreY = oy + (oy / 2) + (fm.getAscent() / 2) - 20; // Abbassato leggermente
+			int score1X = (ox / 2) - (fmScore.stringWidth(score1Str) / 2);
+			int score2X = (ox + (ox / 2)) - (fmScore.stringWidth(score2Str) / 2);
+			int scoreY = oy + (oy / 2) + (fmScore.getAscent() / 2) - 20;
 
 			g2.drawString(score1Str, score1X, scoreY);
 			g2.drawString(score2Str, score2X, scoreY);
 
-			// 4. Disegno lo sciame di palline piccole
 			g2.setColor(Color.BLACK);
 			g2.setStroke(new BasicStroke(1));
 			for (var b: model.getBalls()) {
@@ -107,27 +96,38 @@ public class ViewFrame extends JFrame {
 				g2.drawOval(x0 - radiusX, y0 - radiusY, radiusX*2, radiusY*2);
 			}
 
-			// 5. Disegno le Palline dei Giocatori (più spesse)
 			g2.setStroke(new BasicStroke(3));
-			g2.setFont(new Font("Arial", Font.BOLD, 16)); // Font per le lettere H e B
+			g2.setFont(new Font("Arial", Font.BOLD, 16));
 			FontMetrics fmLetter = g2.getFontMetrics();
 
-			// Disegno Giocatore 1 (H)
 			var p1 = model.getPlayer1();
-			if (p1 != null) {
-				drawPlayerBall(g2, p1, "H", fmLetter);
-			}
+			if (p1 != null) drawPlayerBall(g2, p1, "H", fmLetter);
 
-			// Disegno Giocatore 2 (B)
 			var p2 = model.getPlayer2();
-			if (p2 != null) {
-				drawPlayerBall(g2, p2, "B", fmLetter);
+			if (p2 != null) drawPlayerBall(g2, p2, "B", fmLetter);
+
+			// Messaggio di Game Over
+			if (model.isGameOver()) {
+				g2.setColor(Color.RED);
+				g2.setFont(new Font("Arial", Font.BOLD, 36));
+				FontMetrics fmGO = g2.getFontMetrics();
+				String msg = model.getWinnerMessage();
+
+				// Centriamo il testo orizzontalmente e verticalmente
+				int msgX = (this.getWidth() - fmGO.stringWidth(msg)) / 2;
+				int msgY = (this.getHeight() + fmGO.getAscent()) / 2 - 50;
+
+				// Disegniamo uno sfondo semitrasparente bianco dietro la scritta per farla leggere meglio
+				g2.setColor(new Color(255, 255, 255, 200));
+				g2.fillRect(msgX - 20, msgY - fmGO.getAscent() - 10, fmGO.stringWidth(msg) + 40, fmGO.getHeight() + 20);
+
+				g2.setColor(Color.RED);
+				g2.drawString(msg, msgX, msgY);
 			}
 
 			sync.notifyFrameRendered();
 		}
 
-		// Metodo di supporto per disegnare le palline dei giocatori per evitare ripetizioni
 		private void drawPlayerBall(Graphics2D g2, BallViewInfo pb, String label, FontMetrics fm) {
 			var p = pb.pos();
 			int x0 = (int)(ox + p.x()*delta);
@@ -137,9 +137,8 @@ public class ViewFrame extends JFrame {
 
 			g2.drawOval(x0 - radiusX, y0 - radiusY, radiusX*2, radiusY*2);
 
-			// Centro la lettera dentro la pallina
 			int textX = x0 - (fm.stringWidth(label) / 2);
-			int textY = y0 + (fm.getAscent() / 2) - 2; // -2 per centrare verticalmente al meglio
+			int textY = y0 + (fm.getAscent() / 2) - 2;
 			g2.drawString(label, textX, textY);
 		}
 	}

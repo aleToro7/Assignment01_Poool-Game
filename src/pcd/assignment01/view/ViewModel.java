@@ -9,17 +9,22 @@ record BallViewInfo(P2d pos, double radius) {}
 public class ViewModel {
 
 	private ArrayList<BallViewInfo> balls;
-	private BallViewInfo player1; // Giocatore di sinistra (H)
-	private BallViewInfo player2; // Giocatore di destra (B)
-	private int score1; // Punteggio giocatore di sinistra
-	private int score2; // Punteggio giocatore di destra
+	private BallViewInfo player1;
+	private BallViewInfo player2;
+	private int score1;
+	private int score2;
 	private int framePerSec;
+
+	private boolean isGameOver;
+	private String winnerMessage;
 
 	public ViewModel() {
 		balls = new ArrayList<BallViewInfo>();
 		framePerSec = 0;
 		score1 = 0;
 		score2 = 0;
+		isGameOver = false;
+		winnerMessage = "";
 	}
 
 	public synchronized void update(Board board, int framePerSec) {
@@ -29,16 +34,18 @@ public class ViewModel {
 		}
 		this.framePerSec = framePerSec;
 
-		// Aggiorniamo i due giocatori
 		var p1 = board.getPlayer1();
 		var p2 = board.getPlayer2();
 
-		if (p1 != null) player1 = new BallViewInfo(p1.getPos(), p1.getRadius());
-		if (p2 != null) player2 = new BallViewInfo(p2.getPos(), p2.getRadius());
+		// Inizializza a null in caso i giocatori siano finiti in buca
+		player1 = (p1 != null) ? new BallViewInfo(p1.getPos(), p1.getRadius()) : null;
+		player2 = (p2 != null) ? new BallViewInfo(p2.getPos(), p2.getRadius()) : null;
 
-		// Aggiorniamo i punteggi
 		this.score1 = board.getScore1();
 		this.score2 = board.getScore2();
+
+		this.isGameOver = board.isGameOver();
+		this.winnerMessage = board.getWinnerMessage();
 	}
 
 	public synchronized ArrayList<BallViewInfo> getBalls(){
@@ -47,12 +54,12 @@ public class ViewModel {
 		return copy;
 	}
 
-	public synchronized int getFramePerSec() {
-		return framePerSec;
-	}
-
+	public synchronized int getFramePerSec() { return framePerSec; }
 	public synchronized BallViewInfo getPlayer1() { return player1; }
 	public synchronized BallViewInfo getPlayer2() { return player2; }
 	public synchronized int getScore1() { return score1; }
 	public synchronized int getScore2() { return score2; }
+
+	public synchronized boolean isGameOver() { return isGameOver; }
+	public synchronized String getWinnerMessage() { return winnerMessage; }
 }
