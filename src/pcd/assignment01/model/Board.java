@@ -17,6 +17,17 @@ public class Board {
     private boolean isGameOver;
     private String winnerMessage;
 
+    /*
+    * lastTouchedBy è una Map<Ball, Integer> dove la chiave è la pallina
+    * e il valore è un intero che identifica l'ultimo giocatore che l'ha toccata
+    * (0 = nessuno, 1 = player1, 2 = player2)
+    *
+    * player1 tocca pallina  → lastTouchedBy[b] = 1
+    * player2 tocca pallina  → lastTouchedBy[b] = 2
+    * pallina tocca pallina  → lastTouchedBy[b1] = 0, lastTouchedBy[b2] = 0
+    * pallina entra buca1 → lastTouchedBy[b] == 1 ? score1++ : niente
+    * pallina entra buca2 → lastTouchedBy[b] == 2 ? score2++
+    * */
     private Map<Ball, Integer> lastTouchedBy;
     private static final double HOLE_RADIUS = 0.25;
 
@@ -54,6 +65,13 @@ public class Board {
                 V2d v1Prima = b1.getVel();
                 V2d v2Prima = b2.getVel();
 
+                /*
+                * Risolviamo la collisione tra le palline:
+                * Se due palline piccole si urtano tra loro, l'ultimo tocco di entrambe
+                * viene azzerato (valore 0).
+                * Questo evita che un punto venga assegnato se una pallina tocca
+                * un'altra prima di entrare in buca.
+                * */
                 Ball.resolveCollision(b1, b2);
 
                 if (!b1.getVel().equals(v1Prima) || !b2.getVel().equals(v2Prima)) {
@@ -63,6 +81,12 @@ public class Board {
             }
         }
 
+        /*
+        * Collisione player-pallina:
+        * La velocità della pallina prima e dopo la collisione viene confrontata:
+        * se è cambiata, significa che c'è stato un impatto reale,
+        * e si registra quel giocatore come ultimo che ha toccato la pallina.
+        * */
         for (var b: balls) {
             if (player1 != null) {
                 V2d vPrima = b.getVel();
