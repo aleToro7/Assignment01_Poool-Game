@@ -87,37 +87,7 @@ public class Board {
         * se è cambiata, significa che c'è stato un impatto reale,
         * e si registra quel giocatore come ultimo che ha toccato la pallina.
         * */
-        for (var b: balls) {
-            if (player1 != null) {
-                V2d vPrima = b.getVel();
-                Ball.resolveCollision(player1, b);
-                if (!b.getVel().equals(vPrima)) lastTouchedBy.put(b, 1);
-            }
-
-            if (player2 != null) {
-                V2d vPrima = b.getVel();
-                Ball.resolveCollision(player2, b);
-                if (!b.getVel().equals(vPrima)) lastTouchedBy.put(b, 2);
-            }
-        }
-
-        if (player1 != null && player2 != null) {
-            Ball.resolveCollision(player1, player2);
-        }
-
-        checkHoles();
-
-        // Se non ci sono più palline piccole sul campo, il gioco finisce.
-        if (balls.isEmpty() && !isGameOver) {
-            isGameOver = true;
-            if (score1 > score2) {
-                winnerMessage = "Vittoria Giocatore H (Punti: " + score1 + " a " + score2 + ")";
-            } else if (score2 > score1) {
-                winnerMessage = "Vittoria Giocatore B (Punti: " + score2 + " a " + score1 + ")";
-            } else {
-                winnerMessage = "Pareggio! (" + score1 + " a " + score2 + ")";
-            }
-        }
+        resolvePlayerCollisionsAndHoles();
     }
 
     private void checkHoles() {
@@ -167,6 +137,41 @@ public class Board {
                 if (lastTouch == 2) incrementScore2();
                 it.remove();
                 lastTouchedBy.remove(b);
+            }
+        }
+    }
+
+    // (le fasi 1 e 2 vengono gestite dal GameLoop tramite i task)
+    public void resolvePlayerCollisionsAndHoles() {
+        List<Ball> ballsCopy = new ArrayList<>(balls);
+        for (var b : ballsCopy) {
+            if (player1 != null) {
+                V2d vPrima = b.getVel();
+                Ball.resolveCollision(player1, b);
+                if (!b.getVel().equals(vPrima)) lastTouchedBy.put(b, 1);
+            }
+            if (player2 != null) {
+                V2d vPrima = b.getVel();
+                Ball.resolveCollision(player2, b);
+                if (!b.getVel().equals(vPrima)) lastTouchedBy.put(b, 2);
+            }
+        }
+        if (player1 != null && player2 != null) {
+            Ball.resolveCollision(player1, player2);
+        }
+        checkHoles();
+        checkEndGame();
+    }
+
+    private void checkEndGame() {
+        if (balls.isEmpty() && !isGameOver) {
+            isGameOver = true;
+            if (score1 > score2) {
+                winnerMessage = "Vittoria Giocatore H (Punti: " + score1 + " a " + score2 + ")";
+            } else if (score2 > score1) {
+                winnerMessage = "Vittoria Giocatore B (Punti: " + score2 + " a " + score1 + ")";
+            } else {
+                winnerMessage = "Pareggio! (" + score1 + " a " + score2 + ")";
             }
         }
     }
