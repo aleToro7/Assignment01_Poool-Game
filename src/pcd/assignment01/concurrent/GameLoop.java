@@ -45,15 +45,14 @@ public class GameLoop extends Thread {
         long t0             = System.currentTimeMillis();
         int  nFrames        = 0;
 
-        var rand            = new Random(2);
+        var rand = new Random(2);
         long lastKickTimeP2 = t0;
-        var  p2             = board.getPlayer2();
 
         viewModel.update(board, 0);
         view.render();
+        var  p2 = board.getPlayer2();
 
         while (!board.isGameOver()) {
-
             // --- Input giocatore (non-blocking poll) ---
             V2d impulse = inputQueue.poll();
             if (impulse != null && board.getPlayer1() != null) {
@@ -134,10 +133,10 @@ public class GameLoop extends Thread {
         int chunkSize = Math.max(1, n / nWorkers);
         var tasks     = new ArrayList<CollisionTask>();
 
-        // Ogni task gestisce le righe [from, to) della matrice triangolare superiore
         for (int i = 0; i < n; i += chunkSize) {
             int to = Math.min(i + chunkSize, n);
-            tasks.add(new CollisionTask(balls, i, to));
+            // Passa la ConcurrentHashMap al task
+            tasks.add(new CollisionTask(balls, i, to, board.getLastTouchedBy()));
         }
 
         List<Future<Void>> futures = executor.invokeAll(tasks);

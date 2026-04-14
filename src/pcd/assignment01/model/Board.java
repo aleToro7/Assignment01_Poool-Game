@@ -1,6 +1,8 @@
 package pcd.assignment01.model;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
 import pcd.assignment01.util.*;
 
 public class Board {
@@ -28,7 +30,7 @@ public class Board {
     * pallina entra buca1 → lastTouchedBy[b] == 1 ? score1++ : niente
     * pallina entra buca2 → lastTouchedBy[b] == 2 ? score2++
     * */
-    private Map<Ball, Integer> lastTouchedBy;
+    private ConcurrentHashMap<Ball, Integer> lastTouchedBy;
     private static final double HOLE_RADIUS = 0.25;
 
     public Board(){
@@ -36,7 +38,7 @@ public class Board {
         score2 = 0;
         isGameOver = false;
         winnerMessage = "";
-        lastTouchedBy = new HashMap<>();
+        lastTouchedBy = new ConcurrentHashMap<>();
     }
 
     public void init(BoardConf conf) {
@@ -176,7 +178,9 @@ public class Board {
         }
     }
 
-    public List<Ball> getBalls(){ return balls; }
+    public List<Ball> getBalls(){
+        return Collections.unmodifiableList(balls);
+    }
     public Ball getPlayer1() { return player1; }
     public Ball getPlayer2() { return player2; }
     public int getScore1() { return score1; }
@@ -188,4 +192,7 @@ public class Board {
     // Getter per lo stato della partita
     public boolean isGameOver() { return isGameOver; }
     public String getWinnerMessage() { return winnerMessage; }
+    public ConcurrentHashMap<Ball, Integer> getLastTouchedBy() {
+        return lastTouchedBy;
+    }
 }
