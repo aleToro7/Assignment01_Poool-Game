@@ -1,16 +1,11 @@
 package pcd.assignment01.concurrent;
 
-import pcd.assignment01.concurrent.tasks.BallUpdateTask;
-import pcd.assignment01.concurrent.tasks.CollisionTask;
-import pcd.assignment01.model.Ball;
 import pcd.assignment01.model.Board;
 import pcd.assignment01.model.V2d;
 import pcd.assignment01.util.BoardConf;
 import pcd.assignment01.view.View;
 import pcd.assignment01.view.ViewModel;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 import java.util.concurrent.*;
 
@@ -19,19 +14,17 @@ public class GameLoop extends Thread {
     private final Board board;
     private final ViewModel viewModel;
     private final View view;
-    private final ExecutorService executor;
-    private final int nWorkers;
+    private final WorkerPool workerPool; // ← solo questa astrazione
 
-    // Input asincrono dal giocatore (tastiera → questo thread)
+    // Nessun import di java.util.concurrent.* nel master
     private final BlockingQueue<V2d> inputQueue = new LinkedBlockingQueue<>();
 
     public GameLoop(BoardConf conf, ViewModel viewModel, View view) {
-        this.nWorkers  = Runtime.getRuntime().availableProcessors();
-        this.executor  = Executors.newFixedThreadPool(nWorkers);
-        this.board     = new Board();
+        this.workerPool = new WorkerPool(); // ← non sa che è un thread pool
+        this.board      = new Board();
         this.board.init(conf);
-        this.viewModel = viewModel;
-        this.view      = view;
+        this.viewModel  = viewModel;
+        this.view       = view;
     }
 
     /** Chiamato dal KeyListener sulla EDT */
@@ -71,23 +64,16 @@ public class GameLoop extends Thread {
             lastUpdateTime  = System.currentTimeMillis();
 
             try {
-                // ============================================================
-                // FASE 1: aggiornamento stato palline (parallelo)
-                // ============================================================
-                parallelBallUpdate(board.getBalls(), elapsed);
+                // FASE 1 — il master delega senza sapere come
+                workerPool.parallelBallUpdate(board.getBalls(), elapsed, board);
 
-                // Aggiorna anche i player ball (sequenziale, solo 2 oggetti)
                 if (board.getPlayer1() != null) board.getPlayer1().updateState(elapsed, board);
                 if (board.getPlayer2() != null) board.getPlayer2().updateState(elapsed, board);
 
-                // ============================================================
-                // FASE 2: collisioni ball-ball (parallelo con partizione per righe)
-                // ============================================================
-                parallelCollisionDetection(board.getBalls());
+                // FASE 2
+                workerPool.parallelCollisionDetection(board.getBalls(), board.getLastTouchedBy());
 
-                // ============================================================
-                // FASE 3: collisioni player-ball e buche (sequenziale)
-                // ============================================================
+                // FASE 3 — sequenziale, rimane nel master
                 board.resolvePlayerCollisionsAndHoles();
 
             } catch (InterruptedException | ExecutionException e) {
@@ -103,48 +89,10 @@ public class GameLoop extends Thread {
             viewModel.update(board, fps);
             view.render();
         }
-
-        executor.shutdown();
-    }
-
-    // ------------------------------------------------------------------
-
-    private void parallelBallUpdate(List<Ball> balls, long dt)
-            throws InterruptedException, ExecutionException {
-
-        int n         = balls.size();
-        int chunkSize = Math.max(1, n / nWorkers);
-        var tasks     = new ArrayList<BallUpdateTask>();
-
-        for (int i = 0; i < n; i += chunkSize) {
-            int to = Math.min(i + chunkSize, n);
-            tasks.add(new BallUpdateTask(balls, i, to, dt, board));
-        }
-
-        // invokeAll blocca finché tutti i task non sono completati
-        List<Future<Void>> futures = executor.invokeAll(tasks);
-        for (Future<Void> f : futures) f.get(); // propaga eventuali eccezioni
-    }
-
-    private void parallelCollisionDetection(List<Ball> balls)
-            throws InterruptedException, ExecutionException {
-
-        int n         = balls.size();
-        int chunkSize = Math.max(1, n / nWorkers);
-        var tasks     = new ArrayList<CollisionTask>();
-
-        for (int i = 0; i < n; i += chunkSize) {
-            int to = Math.min(i + chunkSize, n);
-            // Passa la ConcurrentHashMap al task
-            tasks.add(new CollisionTask(balls, i, to, board.getLastTouchedBy()));
-        }
-
-        List<Future<Void>> futures = executor.invokeAll(tasks);
-        for (Future<Void> f : futures) f.get();
     }
 
     public void stopLoop() {
-        executor.shutdownNow();
+        workerPool.shutdown();
         this.interrupt();
     }
 }
