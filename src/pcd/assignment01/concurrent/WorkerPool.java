@@ -19,39 +19,41 @@ public class WorkerPool {
     private final int nWorkers;
 
     public WorkerPool() {
-        this.nWorkers = Runtime.getRuntime().availableProcessors();
+        this.nWorkers = Runtime.getRuntime().availableProcessors() * 2;
         this.executor = Executors.newFixedThreadPool(nWorkers);
     }
 
     public void parallelBallUpdate(List<Ball> balls, long dt, Board board)
             throws InterruptedException, ExecutionException {
 
-        int n         = balls.size();
+        int n = balls.size();
         int chunkSize = Math.max(1, n / nWorkers);
-        var tasks     = new ArrayList<BallUpdateTask>();
+        var tasks = new ArrayList<BallUpdateTask>();
 
         for (int i = 0; i < n; i += chunkSize) {
             tasks.add(new BallUpdateTask(balls, i, Math.min(i + chunkSize, n), dt, board));
         }
 
         List<Future<Void>> futures = executor.invokeAll(tasks);
-        for (Future<Void> f : futures) f.get();
+        for (Future<Void> f : futures)
+            f.get();
     }
 
     public void parallelCollisionDetection(List<Ball> balls,
-                                           ConcurrentHashMap<Ball, Integer> lastTouchedBy)
+            ConcurrentHashMap<Ball, Integer> lastTouchedBy)
             throws InterruptedException, ExecutionException {
 
-        int n         = balls.size();
+        int n = balls.size();
         int chunkSize = Math.max(1, n / nWorkers);
-        var tasks     = new ArrayList<CollisionTask>();
+        var tasks = new ArrayList<CollisionTask>();
 
         for (int i = 0; i < n; i += chunkSize) {
             tasks.add(new CollisionTask(balls, i, Math.min(i + chunkSize, n), lastTouchedBy));
         }
 
         List<Future<Void>> futures = executor.invokeAll(tasks);
-        for (Future<Void> f : futures) f.get();
+        for (Future<Void> f : futures)
+            f.get();
     }
 
     public void shutdown() {
