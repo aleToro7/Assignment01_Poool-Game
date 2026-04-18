@@ -17,7 +17,7 @@ public class Ball {
        this.vel = vel;
     }
 
-    public synchronized void updateState(long dt, Board ctx){
+    public void updateState(long dt, Board ctx){
         double speed = vel.abs();
         double dt_scaled = dt*0.001;
     	if (speed > 0.001) {
@@ -31,7 +31,7 @@ public class Ball {
      	applyBoundaryConstraints(ctx);
     }
     
-    public synchronized void kick(V2d vel) {
+    public void kick(V2d vel) {
     	this.vel = vel;
     }
 
@@ -134,7 +134,7 @@ public class Ball {
     }
 
     
-    public synchronized P2d getPos(){        
+    public P2d getPos(){        
     	return pos;
     }
     
@@ -142,7 +142,7 @@ public class Ball {
     	return mass;
     }
     
-    public synchronized V2d getVel() {
+    public V2d getVel() {
     	return vel;
     }
     
