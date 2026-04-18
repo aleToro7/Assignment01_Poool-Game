@@ -18,21 +18,26 @@ public class ViewFrame extends JFrame {
 	private ViewModel model;
 	private RenderSynch sync;
 
-	public ViewFrame(ViewModel model, int w, int h){
+	public ViewFrame(ViewModel model, int w, int h) {
 		this.model = model;
 		this.sync = new RenderSynch();
 		setTitle("Poool Sketch");
-		setSize(w,h + 25);
+		setSize(w, h + 25);
 		setResizable(false);
-		panel = new VisualiserPanel(w,h);
+		panel = new VisualiserPanel(w, h);
 		getContentPane().add(panel);
-		addWindowListener(new WindowAdapter(){
-			public void windowClosing(WindowEvent ev){ System.exit(-1); }
-			public void windowClosed(WindowEvent ev){ System.exit(-1); }
+		addWindowListener(new WindowAdapter() {
+			public void windowClosing(WindowEvent ev) {
+				System.exit(-1);
+			}
+
+			public void windowClosed(WindowEvent ev) {
+				System.exit(-1);
+			}
 		});
 	}
 
-	public void render(){
+	public void render() {
 		long nf = sync.nextFrameToRender();
 		panel.repaint();
 		try {
@@ -47,29 +52,29 @@ public class ViewFrame extends JFrame {
 		private int oy;
 		private int delta;
 
-		public VisualiserPanel(int w, int h){
-			setSize(w,h + 25);
-			ox = w/2;
-			oy = h/2;
+		public VisualiserPanel(int w, int h) {
+			setSize(w, h + 25);
+			ox = w / 2;
+			oy = h / 2;
 			delta = Math.min(ox, oy);
 		}
 
-		public void paint(Graphics g){
+		public void paint(Graphics g) {
 			Graphics2D g2 = (Graphics2D) g;
 
 			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 			g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-			g2.clearRect(0,0,this.getWidth(),this.getHeight());
+			g2.clearRect(0, 0, this.getWidth(), this.getHeight());
 
 			g2.setColor(Color.LIGHT_GRAY);
 			g2.setStroke(new BasicStroke(1));
-			g2.drawLine(ox,0,ox,oy*2);
-			g2.drawLine(0,oy,ox*2,oy);
+			g2.drawLine(ox, 0, ox, oy * 2);
+			g2.drawLine(0, oy, ox * 2, oy);
 
 			g2.setColor(Color.BLACK);
 			int holeRadius = 100;
-			g2.fillArc(-holeRadius, -holeRadius, holeRadius*2, holeRadius*2, 270, 90);
-			g2.fillArc(getWidth() - holeRadius, -holeRadius, holeRadius*2, holeRadius*2, 180, 90);
+			g2.fillArc(-holeRadius, -holeRadius, holeRadius * 2, holeRadius * 2, 270, 90);
+			g2.fillArc(getWidth() - holeRadius, -holeRadius, holeRadius * 2, holeRadius * 2, 180, 90);
 
 			g2.setColor(Color.BLUE);
 			g2.setFont(new Font("Arial", Font.PLAIN, 120));
@@ -87,13 +92,13 @@ public class ViewFrame extends JFrame {
 
 			g2.setColor(Color.BLACK);
 			g2.setStroke(new BasicStroke(1));
-			for (var b: model.getBalls()) {
+			for (var b : model.getBalls()) {
 				var p = b.pos();
-				int x0 = (int)(ox + p.x()*delta);
-				int y0 = (int)(oy - p.y()*delta);
-				int radiusX = (int)(b.radius()*delta);
-				int radiusY = (int)(b.radius()*delta);
-				g2.drawOval(x0 - radiusX, y0 - radiusY, radiusX*2, radiusY*2);
+				int x0 = (int) (ox + p.x() * delta);
+				int y0 = (int) (oy - p.y() * delta);
+				int radiusX = (int) (b.radius() * delta);
+				int radiusY = (int) (b.radius() * delta);
+				g2.drawOval(x0 - radiusX, y0 - radiusY, radiusX * 2, radiusY * 2);
 			}
 
 			g2.setStroke(new BasicStroke(3));
@@ -101,10 +106,12 @@ public class ViewFrame extends JFrame {
 			FontMetrics fmLetter = g2.getFontMetrics();
 
 			var p1 = model.getPlayer1();
-			if (p1 != null) drawPlayerBall(g2, p1, "H", fmLetter);
+			if (p1 != null)
+				drawPlayerBall(g2, p1, "H", fmLetter);
 
 			var p2 = model.getPlayer2();
-			if (p2 != null) drawPlayerBall(g2, p2, "B", fmLetter);
+			if (p2 != null)
+				drawPlayerBall(g2, p2, "B", fmLetter);
 
 			// Messaggio di Game Over
 			if (model.isGameOver()) {
@@ -117,7 +124,8 @@ public class ViewFrame extends JFrame {
 				int msgX = (this.getWidth() - fmGO.stringWidth(msg)) / 2;
 				int msgY = (this.getHeight() + fmGO.getAscent()) / 2 - 50;
 
-				// Disegniamo uno sfondo semitrasparente bianco dietro la scritta per farla leggere meglio
+				// Disegniamo uno sfondo semitrasparente bianco dietro la scritta per farla
+				// leggere meglio
 				g2.setColor(new Color(255, 255, 255, 200));
 				g2.fillRect(msgX - 20, msgY - fmGO.getAscent() - 10, fmGO.stringWidth(msg) + 40, fmGO.getHeight() + 20);
 
@@ -130,12 +138,12 @@ public class ViewFrame extends JFrame {
 
 		private void drawPlayerBall(Graphics2D g2, BallViewInfo pb, String label, FontMetrics fm) {
 			var p = pb.pos();
-			int x0 = (int)(ox + p.x()*delta);
-			int y0 = (int)(oy - p.y()*delta);
-			int radiusX = (int)(pb.radius()*delta);
-			int radiusY = (int)(pb.radius()*delta);
+			int x0 = (int) (ox + p.x() * delta);
+			int y0 = (int) (oy - p.y() * delta);
+			int radiusX = (int) (pb.radius() * delta);
+			int radiusY = (int) (pb.radius() * delta);
 
-			g2.drawOval(x0 - radiusX, y0 - radiusY, radiusX*2, radiusY*2);
+			g2.drawOval(x0 - radiusX, y0 - radiusY, radiusX * 2, radiusY * 2);
 
 			int textX = x0 - (fm.stringWidth(label) / 2);
 			int textY = y0 + (fm.getAscent() / 2) - 2;

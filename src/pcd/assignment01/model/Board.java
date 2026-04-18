@@ -92,7 +92,7 @@ public class Board {
         resolvePlayerCollisionsAndHoles();
     }
 
-    private void checkHoles() {
+    private synchronized void checkHoles() {
         P2d hole1Pos = new P2d(bounds.x0(), bounds.y1());
         P2d hole2Pos = new P2d(bounds.x1(), bounds.y1());
 
@@ -144,7 +144,7 @@ public class Board {
     }
 
     // (le fasi 1 e 2 vengono gestite dal GameLoop tramite i task)
-    public void resolvePlayerCollisionsAndHoles() {
+    public synchronized void resolvePlayerCollisionsAndHoles() {
         List<Ball> ballsCopy = new ArrayList<>(balls);
         for (var b : ballsCopy) {
             if (player1 != null) {
@@ -178,20 +178,20 @@ public class Board {
         }
     }
 
-    public List<Ball> getBalls(){
+    public synchronized List<Ball> getBalls(){
         return Collections.unmodifiableList(balls);
     }
-    public Ball getPlayer1() { return player1; }
-    public Ball getPlayer2() { return player2; }
-    public int getScore1() { return score1; }
-    public int getScore2() { return score2; }
-    public Boundary getBounds(){ return bounds; }
-    public void incrementScore1() { this.score1++; }
-    public void incrementScore2() { this.score2++; }
+    public synchronized Ball getPlayer1() { return player1; }
+    public synchronized Ball getPlayer2() { return player2; }
+    public synchronized int getScore1() { return score1; }
+    public synchronized int getScore2() { return score2; }
+    public synchronized Boundary getBounds(){ return bounds; }
+    public synchronized void incrementScore1() { this.score1++; }
+    public synchronized void incrementScore2() { this.score2++; }
 
     // Getter per lo stato della partita
-    public boolean isGameOver() { return isGameOver; }
-    public String getWinnerMessage() { return winnerMessage; }
+    public synchronized boolean isGameOver() { return isGameOver; }
+    public synchronized String getWinnerMessage() { return winnerMessage; }
     public ConcurrentHashMap<Ball, Integer> getLastTouchedBy() {
         return lastTouchedBy;
     }
