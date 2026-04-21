@@ -133,6 +133,15 @@ public class ViewFrame extends JFrame {
 				g2.drawString(msg, msgX, msgY);
 			}
 
+			// FPS disegnato per ultimo, sopra tutti gli altri elementi
+			g2.setFont(new Font("Arial", Font.BOLD, 14));
+			String fpsStr = "FPS: " + model.getFramePerSec();
+			FontMetrics fmFps = g2.getFontMetrics();
+			g2.setColor(new Color(255, 255, 255, 180));
+			g2.fillRect(6, 6, fmFps.stringWidth(fpsStr) + 8, fmFps.getHeight() + 4);
+			g2.setColor(Color.BLACK);
+			g2.drawString(fpsStr, 10, 6 + fmFps.getAscent());
+
 			sync.notifyFrameRendered();
 		}
 
