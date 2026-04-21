@@ -1,4 +1,4 @@
-package pcd.assignment01.concurrent.tasks;
+package pcd.assignment01.controller.tasks;
 
 import pcd.assignment01.model.Ball;
 import pcd.assignment01.model.Board;

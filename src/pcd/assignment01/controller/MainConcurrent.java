@@ -1,4 +1,4 @@
-package pcd.assignment01.concurrent;
+package pcd.assignment01.controller;
 
 import pcd.assignment01.model.V2d;
 import pcd.assignment01.util.LargeBoardConf;

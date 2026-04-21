@@ -1,7 +1,7 @@
-package pcd.assignment01.concurrent;
+package pcd.assignment01.controller;
 
-import pcd.assignment01.concurrent.tasks.BallUpdateTask;
-import pcd.assignment01.concurrent.tasks.CollisionTask;
+import pcd.assignment01.controller.tasks.BallUpdateTask;
+import pcd.assignment01.controller.tasks.CollisionTask;
 import pcd.assignment01.model.Ball;
 import pcd.assignment01.model.Board;
 
