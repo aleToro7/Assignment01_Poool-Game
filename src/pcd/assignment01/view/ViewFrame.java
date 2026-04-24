@@ -35,6 +35,9 @@ public class ViewFrame extends JFrame {
 	public void render(){
 		long nf = sync.nextFrameToRender();
 		panel.repaint();
+		if (SwingUtilities.isEventDispatchThread()) {
+			return;
+		}
 		try {
 			sync.waitForFrameRendered(nf);
 		} catch (InterruptedException ex) {
