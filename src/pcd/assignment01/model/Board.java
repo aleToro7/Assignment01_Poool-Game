@@ -168,14 +168,14 @@ public class Board {
         }
     }
 
-    public synchronized List<Ball> getBalls() { return new ArrayList<>(balls); }
-    public synchronized Ball getPlayer1() { return player1; }
-    public synchronized Ball getPlayer2() { return player2; }
-    public synchronized int getScore1() { return score1; }
-    public synchronized int getScore2() { return score2; }
-    public synchronized Boundary getBounds() { return bounds; }
-    public synchronized void incrementScore1() { this.score1++; }
-    public synchronized void incrementScore2() { this.score2++; }
+    public List<Ball> getBalls() { return new ArrayList<>(balls); }
+    public Ball getPlayer1() { return player1; }
+    public Ball getPlayer2() { return player2; }
+    public int getScore1() { return score1; }
+    public int getScore2() { return score2; }
+    public Boundary getBounds() { return bounds; }
+    public void incrementScore1() { this.score1++; }
+    public void incrementScore2() { this.score2++; }
 
     public synchronized void kickPlayer1(V2d impulse) {
         if (player1 != null) {
@@ -191,6 +191,5 @@ public class Board {
 
     public synchronized boolean isGameOver() { return isGameOver; }
     public synchronized String getWinnerMessage() { return winnerMessage; }
-    public synchronized Map<Ball, Integer> getLastTouchedBy() { return lastTouchedBy; }
     public Object getBotMonitor() { return botMonitor; }
 }

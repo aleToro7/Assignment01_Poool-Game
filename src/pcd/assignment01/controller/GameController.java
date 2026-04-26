@@ -1,6 +1,5 @@
 package pcd.assignment01.controller;
 
-import javax.swing.SwingUtilities;
 import pcd.assignment01.model.Board;
 import pcd.assignment01.view.ViewModel;
 import pcd.assignment01.view.View;
@@ -85,12 +84,12 @@ public class GameController {
             }
 
             // Sleep a bit to control frame rate
-            try {
-                Thread.sleep(16); // ~60 FPS
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
+//            try {
+//                Thread.sleep(16); // ~60 FPS
+//            } catch (InterruptedException e) {
+//                Thread.currentThread().interrupt();
+//                break;
+//            }
         }
     }
 
