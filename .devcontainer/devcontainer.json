@@ -1,0 +1,16 @@
+{
+    "name": "JPF Environment - PCD Lab",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "vscjava.vscode-java-pack"
+            ]
+        }
+    },
+    "remoteUser": "vscode",
+    "workspaceFolder": "/pcd-jpf",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/pcd-jpf,type=bind"
+}

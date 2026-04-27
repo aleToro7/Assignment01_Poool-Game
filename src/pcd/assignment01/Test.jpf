@@ -1,0 +1,8 @@
+# Indica a JPF quale classe contiene il metodo "main" da analizzare
+target = pcd.assignment01.controller.MainJPF
+
+# Indica a JPF dove trovare i tuoi file compilati
+classpath = /pcd-jpf/target/classes
+
+listener=gov.nasa.jpf.listener.PreciseRaceDetector
+report.console.property_violation=error,trace

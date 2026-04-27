@@ -6,7 +6,7 @@ import pcd.assignment01.util.BoardConf;
 import pcd.assignment01.view.View;
 import pcd.assignment01.view.ViewModel;
 
-import java.util.Random;
+// import java.util.Random;
 import java.util.concurrent.*;
 
 public class GameLoop extends Thread {
@@ -15,6 +15,8 @@ public class GameLoop extends Thread {
     private final ViewModel viewModel;
     private final View view;
     private final WorkerPool workerPool; // ← solo questa astrazione
+
+    private volatile boolean running = true;
 
     // Nessun import di java.util.concurrent.* nel master
     private final BlockingQueue<V2d> inputQueue = new LinkedBlockingQueue<>();
@@ -38,14 +40,16 @@ public class GameLoop extends Thread {
         long t0             = System.currentTimeMillis();
         int  nFrames        = 0;
 
-        var rand = new Random(2);
-        long lastKickTimeP2 = t0;
+        //var rand = new Random(2);
+        // long lastKickTimeP2 = t0;
 
         viewModel.update(board, 0);
-        view.render();
-        var  p2 = board.getPlayer2();
+        if (view != null) {
+            view.render();
+        }
+        // var  p2 = board.getPlayer2();
 
-        while (!board.isGameOver()) {
+        while (running && !board.isGameOver()) {
             // --- Input giocatore (non-blocking poll) ---
             V2d impulse = inputQueue.poll();
             if (impulse != null && board.getPlayer1() != null) {
@@ -53,12 +57,13 @@ public class GameLoop extends Thread {
             }
 
             // --- Bot ---
+            /* 
             if (p2 != null && p2.getVel().abs() < 0.05
                     && System.currentTimeMillis() - lastKickTimeP2 > 2000) {
                 double angle = rand.nextDouble() * Math.PI * 0.25 + Math.PI * 0.75;
                 p2.kick(new V2d(Math.cos(angle), Math.sin(angle)).mul(1.5));
                 lastKickTimeP2 = System.currentTimeMillis();
-            }
+            } */
 
             long elapsed    = System.currentTimeMillis() - lastUpdateTime;
             lastUpdateTime  = System.currentTimeMillis();
@@ -85,14 +90,17 @@ public class GameLoop extends Thread {
             nFrames++;
             long dt = System.currentTimeMillis() - t0;
             int fps = dt > 0 ? (int)(nFrames * 1000 / dt) : 0;
-
+            
+            if (viewModel != null) {
             viewModel.update(board, fps);
             view.render();
+            }
         }
     }
 
     public void stopLoop() {
+        this.running = false;
         workerPool.shutdown();
-        this.interrupt();
+        // this.interrupt();
     }
 }
