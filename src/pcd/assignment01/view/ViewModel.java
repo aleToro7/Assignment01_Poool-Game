@@ -4,7 +4,45 @@ import pcd.assignment01.model.Board;
 import pcd.assignment01.model.P2d;
 import java.util.ArrayList;
 
-record BallViewInfo(P2d pos, double radius) {}
+class BallViewInfo {
+	private final P2d pos;
+	private final double radius;
+	
+	BallViewInfo(P2d pos, double radius) {
+		this.pos = pos;
+		this.radius = radius;
+	}
+	
+	P2d pos() {
+		return pos;
+	}
+	
+	double radius() {
+		return radius;
+	}
+	
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) return true;
+		if (o == null || getClass() != o.getClass()) return false;
+		BallViewInfo that = (BallViewInfo) o;
+		return Double.compare(that.radius, radius) == 0 && 
+		       (pos != null ? pos.equals(that.pos) : that.pos == null);
+	}
+	
+	@Override
+	public int hashCode() {
+		long temp = Double.doubleToLongBits(radius);
+		int result = (int) (temp ^ (temp >>> 32));
+		result = 31 * result + (pos != null ? pos.hashCode() : 0);
+		return result;
+	}
+	
+	@Override
+	public String toString() {
+		return "BallViewInfo(pos=" + pos + ", radius=" + radius + ")";
+	}
+}
 
 public class ViewModel {
 
