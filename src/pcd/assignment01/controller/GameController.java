@@ -76,7 +76,10 @@ public class GameController {
             }
 
             viewModel.update(board, framePerSec);
-            view.render();
+            
+            if (view != null) {
+                view.render();
+            }
 
             if (board.isGameOver()) {
                 running = false;
@@ -97,25 +100,29 @@ public class GameController {
      * Bot behavior loop running in a separate thread.
      */
     private void botLoop() {
-        var rand = new java.util.Random(2);
+        // var rand = new java.util.Random(2);
         long lastKickTimeP2 = System.currentTimeMillis();
 
         synchronized (board.getBotMonitor()) {
             while (running) {
                 var p2 = board.getPlayer2();
+                /* 
                 if (p2 != null && p2.getVel().abs() < 0.05 && System.currentTimeMillis() - lastKickTimeP2 >= 2000) {
                     var angle = rand.nextDouble() * Math.PI * 0.25 + Math.PI * 0.75;
                     var v = new pcd.assignment01.model.V2d(Math.cos(angle), Math.sin(angle)).mul(1.5);
                     board.kickPlayer2(v);
                     lastKickTimeP2 = System.currentTimeMillis();
                 } else {
+                    */
+
                     try {
                         board.getBotMonitor().wait();
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         break;
                     }
-                }
+                /* }
+                    */
 
                 if (board.isGameOver()) {
                     running = false;
