@@ -26,7 +26,7 @@ public class MainJPF {
 
         // Facciamo girare la simulazione per un tempo controllato
         try {
-            Thread.sleep(10);
+            loop.getUpdateThread().join(); // Attende 5 secondi o fino a quando il thread termina
             loop.stopGame();
         } catch (InterruptedException e) {
             e.printStackTrace();
