@@ -24,10 +24,18 @@ public class MainConcurrent {
             public void keyPressed(KeyEvent e) {
                 double speed = 1.5;
                 switch (e.getKeyCode()) {
-                    case KeyEvent.VK_UP    -> gameLoop.notifyInput(new V2d(0,  speed));
-                    case KeyEvent.VK_DOWN  -> gameLoop.notifyInput(new V2d(0, -speed));
-                    case KeyEvent.VK_LEFT  -> gameLoop.notifyInput(new V2d(-speed, 0));
-                    case KeyEvent.VK_RIGHT -> gameLoop.notifyInput(new V2d( speed, 0));
+                    case KeyEvent.VK_UP:
+                        gameLoop.notifyInput(new V2d(0, speed));
+                        break;
+                    case KeyEvent.VK_DOWN:
+                        gameLoop.notifyInput(new V2d(0, -speed));
+                        break;
+                    case KeyEvent.VK_LEFT:
+                        gameLoop.notifyInput(new V2d(-speed, 0));
+                        break;
+                    case KeyEvent.VK_RIGHT:
+                        gameLoop.notifyInput(new V2d(speed, 0));
+                        break;
                 }
             }
         });
