@@ -1,0 +1,81 @@
+\relax 
+\providecommand \babel@aux [2]{\global \let \babel@toc \@gobbletwo }
+\@nameuse{bbl@beforestart}
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\babel@aux{english}{}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Problem Analysis}{2}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Problem Description}{2}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Concurrency-Related Challenges}{2}{subsection.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.1}Computational Complexity}{2}{subsubsection.1.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.2}Temporal Constraints}{2}{subsubsection.1.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.3}Synchronization Requirements}{2}{subsubsection.1.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.4}Data Races and Race Conditions}{3}{subsubsection.1.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Design and Architecture}{3}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Architectural Overview}{3}{subsection.2.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Poool Game Architecture Overview}}{3}{figure.1}\protected@file@percent }
+\newlabel{fig:architecture}{{1}{3}{Poool Game Architecture Overview}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Component Description}{3}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.2.1}Model Layer}{3}{subsubsection.2.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.2.2}Controller Layer}{4}{subsubsection.2.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.2.3}View Layer}{4}{subsubsection.2.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Synchronization Strategy}{4}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.3.1}Monitor-Based Synchronization}{4}{subsubsection.2.3.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {1}Board Synchronized Methods}{4}{lstlisting.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.3.2}Bot Monitor}{5}{subsubsection.2.3.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {2}Bot Thread Synchronization}{5}{lstlisting.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.3.3}Rendering Synchronization (RenderSync)}{5}{subsubsection.2.3.3}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3}RenderSync Implementation}{5}{lstlisting.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Thread Lifecycle}{5}{subsection.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Behavior Specification: Petri Nets}{6}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}High-Level Game Flow Net}{6}{subsection.3.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Game State Petri Net: $p_0$ (Idle) $\xrightarrow  {t_1}$ $p_1$ (Running) $\xrightarrow  {t_2}$ $p_2$ (Win/End) or $\xrightarrow  {t_3}$ $p_3$ (GameOver)}}{6}{figure.2}\protected@file@percent }
+\newlabel{fig:petri_game}{{2}{6}{Game State Petri Net: $p_0$ (Idle) $\xrightarrow {t_1}$ $p_1$ (Running) $\xrightarrow {t_2}$ $p_2$ (Win/End) or $\xrightarrow {t_3}$ $p_3$ (GameOver)}{figure.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Update Thread Behavior Net}{6}{subsection.3.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Update Thread Loop: Sequential phases of elapsed time calculation, board state update, view model update, and rendering}}{6}{figure.3}\protected@file@percent }
+\newlabel{fig:petri_update}{{3}{6}{Update Thread Loop: Sequential phases of elapsed time calculation, board state update, view model update, and rendering}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Bot Thread Behavior Net}{7}{subsection.3.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Bot Thread: Waits on monitor, checks velocity, kicks when idle}}{7}{figure.4}\protected@file@percent }
+\newlabel{fig:petri_bot}{{4}{7}{Bot Thread: Waits on monitor, checks velocity, kicks when idle}{figure.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Performance Evaluation}{7}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Experimental Setup}{7}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.1}Test Configurations}{7}{subsubsection.4.1.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Board Configurations and Collision Detection Complexity}}{7}{table.1}\protected@file@percent }
+\newlabel{tab:configs}{{1}{7}{Board Configurations and Collision Detection Complexity}{table.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.2}Performance Metrics}{7}{subsubsection.4.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Expected Performance Improvements}{8}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.1}Sequential Baseline Issues}{8}{subsubsection.4.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.2}Concurrent Improvements}{8}{subsubsection.4.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Synchronization Overhead}{8}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Formal Verification with JPF}{9}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Java Path Finder Integration}{9}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.1}JPF Configuration}{9}{subsubsection.5.1.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {4}JPF Verification Approach}{9}{lstlisting.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Safety Properties Verified}{9}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.2.1}1. Mutual Exclusion (No Data Races)}{9}{subsubsection.5.2.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {5}Critical Section: Board.updateState()}{9}{lstlisting.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.2.2}2. Deadlock Freedom}{9}{subsubsection.5.2.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Lock Hierarchy for Deadlock Prevention}}{9}{table.2}\protected@file@percent }
+\newlabel{tab:locks}{{2}{9}{Lock Hierarchy for Deadlock Prevention}{table.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.2.3}3. Liveness (Game Termination)}{10}{subsubsection.5.2.3}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {6}Termination Assertion}{10}{lstlisting.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Race Condition Detection}{10}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.1}Synchronized Field Accesses}{10}{subsubsection.5.3.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {7}Synchronized Field Protection}{10}{lstlisting.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.2}Temporal Assertions}{10}{subsubsection.5.3.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {8}Invariants Checked by JPF}{10}{lstlisting.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Model Checking Results}{11}{subsection.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.4.1}Test Configuration: MainJPF}{11}{subsubsection.5.4.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {9}MainJPF Verification Driver}{11}{lstlisting.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.4.2}Verification Scope Limitations}{11}{subsubsection.5.4.2}\protected@file@percent }
+\bibcite{jpf}{1}
+\bibcite{petri}{2}
+\bibcite{monitors}{3}
+\bibcite{java-concurrency}{4}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Known Limitations}{12}{subsection.5.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion}{12}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {A}Code Listings}{12}{appendix.A}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}GameController Main Loop}{12}{subsection.A.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {10}Update Loop Implementation}{13}{lstlisting.10}\protected@file@percent }
+\gdef \@abspage@last{13}
