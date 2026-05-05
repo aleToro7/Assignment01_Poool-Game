@@ -30,6 +30,7 @@ public class Board {
     * */
     private Map<Ball, Integer> lastTouchedBy;
     private static final double HOLE_RADIUS = 0.25;
+    private final Object botMonitor = new Object();
 
     public Board(){
         score1 = 0;
@@ -46,37 +47,37 @@ public class Board {
         bounds = conf.getBoardBoundary();
     }
 
-    public void updateState(long dt) {
+    public synchronized void updateState(long dt) {
         // Se la partita è finita, blocchiamo la fisica (il gioco si "congela")
         if (isGameOver) return;
 
         if (player1 != null) player1.updateState(dt, this);
-        if (player2 != null) player2.updateState(dt, this);
+        if (player2 != null) {
+            player2.updateState(dt, this);
+            if (player2.getVel().abs() < 0.05) {
+                synchronized (botMonitor) {
+                    botMonitor.notify();
+                }
+            }
+        }
 
         for (var b: balls) {
             b.updateState(dt, this);
         }
 
-        for (int i = 0; i < balls.size() - 1; i++) {
+        // Collisioni tra palline piccole - sequenziale
+        for (int i = 0; i < balls.size(); i++) {
             for (int j = i + 1; j < balls.size(); j++) {
-                Ball b1 = balls.get(i);
-                Ball b2 = balls.get(j);
-
-                V2d v1Prima = b1.getVel();
-                V2d v2Prima = b2.getVel();
-
-                /*
-                * Risolviamo la collisione tra le palline:
-                * Se due palline piccole si urtano tra loro, l'ultimo tocco di entrambe
-                * viene azzerato (valore 0).
-                * Questo evita che un punto venga assegnato se una pallina tocca
-                * un'altra prima di entrare in buca.
-                * */
-                Ball.resolveCollision(b1, b2);
-
-                if (!b1.getVel().equals(v1Prima) || !b2.getVel().equals(v2Prima)) {
-                    lastTouchedBy.put(b1, 0);
-                    lastTouchedBy.put(b2, 0);
+                var ballI = balls.get(i);
+                var ballJ = balls.get(j);
+                V2d vPrimaI = ballI.getVel();
+                V2d vPrimaJ = ballJ.getVel();
+                Ball.resolveCollision(ballI, ballJ);
+                if (!ballI.getVel().equals(vPrimaI)) {
+                    lastTouchedBy.remove(ballI);
+                }
+                if (!ballJ.getVel().equals(vPrimaJ)) {
+                    lastTouchedBy.remove(ballJ);
                 }
             }
         }
@@ -153,34 +154,43 @@ public class Board {
             P2d p = b.getPos();
 
             double dist1 = Math.hypot(p.x() - hole1Pos.x(), p.y() - hole1Pos.y());
-            if (dist1 < HOLE_RADIUS) {
-                int lastTouch = lastTouchedBy.getOrDefault(b, 0);
-                if (lastTouch == 1) incrementScore1();
-                it.remove();
-                lastTouchedBy.remove(b);
-                continue;
-            }
-
             double dist2 = Math.hypot(p.x() - hole2Pos.x(), p.y() - hole2Pos.y());
-            if (dist2 < HOLE_RADIUS) {
+            if (dist1 < HOLE_RADIUS || dist2 < HOLE_RADIUS) {
                 int lastTouch = lastTouchedBy.getOrDefault(b, 0);
-                if (lastTouch == 2) incrementScore2();
+                if (lastTouch == 1) {
+                    incrementScore1();
+                } else if (lastTouch == 2) {
+                    incrementScore2();
+                }
                 it.remove();
                 lastTouchedBy.remove(b);
             }
         }
     }
 
-    public List<Ball> getBalls(){ return balls; }
-    public Ball getPlayer1() { return player1; }
-    public Ball getPlayer2() { return player2; }
-    public int getScore1() { return score1; }
-    public int getScore2() { return score2; }
-    public Boundary getBounds(){ return bounds; }
-    public void incrementScore1() { this.score1++; }
-    public void incrementScore2() { this.score2++; }
+    public synchronized List<Ball> getBalls() { return new ArrayList<>(balls); }
+    public synchronized Ball getPlayer1() { return player1; }
+    public synchronized Ball getPlayer2() { return player2; }
+    public synchronized int getScore1() { return score1; }
+    public synchronized int getScore2() { return score2; }
+    public synchronized Boundary getBounds() { return bounds; }
+    public synchronized void incrementScore1() { this.score1++; }
+    public synchronized void incrementScore2() { this.score2++; }
 
-    // Getter per lo stato della partita
-    public boolean isGameOver() { return isGameOver; }
-    public String getWinnerMessage() { return winnerMessage; }
+    public synchronized void kickPlayer1(V2d impulse) {
+        if (player1 != null) {
+            player1.kick(impulse);
+        }
+    }
+
+    public synchronized void kickPlayer2(V2d impulse) {
+        if (player2 != null) {
+            player2.kick(impulse);
+        }
+    }
+
+    public synchronized boolean isGameOver() { return isGameOver; }
+    public synchronized String getWinnerMessage() { return winnerMessage; }
+    public synchronized Map<Ball, Integer> getLastTouchedBy() { return lastTouchedBy; }
+    public Object getBotMonitor() { return botMonitor; }
 }
