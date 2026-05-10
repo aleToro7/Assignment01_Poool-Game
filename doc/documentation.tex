@@ -34,7 +34,7 @@
 
 \title{Poool Game: Concurrent Implementation Report}
 \author{Assignment 01 - PCD Course}
-\date{Academic Year 2024-2025}
+\date{Academic Year 2025-2026}
 
 \pagestyle{fancy}
 \fancyhead[L]{Poool Game - Concurrent Implementation}
@@ -62,26 +62,24 @@ The Poool Game is a two-player billiard-like game on a 2D board with the followi
     \item \textbf{Physics Simulation}: Elastic collisions, friction forces, and momentum transfer between bodies
     \item \textbf{Players}: Two players (human controlled via keyboard, bot controlled autonomously) with scoring systems
     \item \textbf{Game Objective}: Insert small balls into holes at board corners; winner is determined by score or by eliminating opponent's ball
-    \item \textbf{Rendering}: Real-time visualization requiring smooth frame rates (25+ fps)
+    \item \textbf{Performance Bottlenecks}: The sequential version of Poool exhibits several performance bottlenecks that motivate concurrent design:
 \end{itemize}
 
 \subsection{Concurrency-Related Challenges}
 
-The sequential version of Poool exhibits several performance bottlenecks that motivate concurrent design:
-
 \subsubsection{Computational Complexity}
 \begin{itemize}
-    \item \textbf{Collision Detection}: $O(n^2)$ algorithm comparing each small ball with all others
-    \item \textbf{Physics Updates}: Computing state transitions for $n$ balls
-    \item \textbf{Rendering Overhead}: Synchronous painting operations block state updates
-    \item \textbf{Scalability Issue}: Massive board configurations (4500 balls) demonstrate poor frame rates (<20 fps)
+    \item \textbf{Collision Detection}: 
+    \item \textbf{Physics Updates}:
+    \item \textbf{Rendering Overhead}: 
+    \item \textbf{Scalability Issue}: Massive board configurations (4500 balls) demonstrate poor frame rates ($<$ 20 fps)
 \end{itemize}
 
 \subsubsection{Temporal Constraints}
 \begin{itemize}
     \item Main game loop must maintain consistent frame timing
-    \item Asynchronous user input (keyboard) must be responsive
-    \item Bot AI decisions occur independently of frame timing
+    \item Asynchronous user input (keyboard) must be always responsive
+    \item Bot decisions occur independently of frame timing
     \item Rendering cannot block physics computation indefinitely
 \end{itemize}
 
@@ -102,41 +100,27 @@ Without proper synchronization, the following race conditions can occur:
     \item \textbf{Collision Detection Errors}: Detecting collisions while positions change
 \end{itemize}
 
+\subsection{Task-based Related Challenges}
+\subsubsection{Computational Complexity}
+\subsubsection{Temporal Constraints}
+\subsubsection{Synchronization Requirements}
+
 \section{Design and Architecture}
 
-\subsection{Architectural Overview}
+\subsection{Architectural Overview for Multithreading}
 
 The concurrent Poool implementation adopts an \textbf{MVC (Model-View-Controller)} architectural pattern with multiple active components:
 
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[node distance=3cm]
-    \node[draw, rectangle] (Model) {Model Layer\\(Board, Balls)};
-    \node[draw, rectangle, right of=Model] (ViewModel) {ViewModel};
-    \node[draw, rectangle, right of=ViewModel] (View) {View\\(GUI)};
-    
-    \node[draw, rectangle, below of=Model] (UpdateThread) {Update Thread};
-    \node[draw, rectangle, below of=ViewModel] (RenderSync) {RenderSync\\Monitor};
-    \node[draw, rectangle, below of=View] (InputController) {Input Controller};
-    
-    \node[draw, rectangle, below of=UpdateThread] (BotThread) {Bot Thread};
-    
-    \draw[<->] (Model) -- (ViewModel);
-    \draw[<->] (ViewModel) -- (View);
-    \draw[->] (UpdateThread) -- (Model);
-    \draw[->] (Model) -- (RenderSync);
-    \draw[->] (RenderSync) -- (View);
-    \draw[->] (InputController) -- (Model);
-    \draw[->] (BotThread) -- (Model);
-    
-\end{tikzpicture}
-\caption{Poool Game Architecture Overview}
-\label{fig:architecture}
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/Thread-model-architecture.png}
+    \caption{A descriptive caption for your image.}
+    \label{fig:image_label}
 \end{figure}
 
-\subsection{Component Description}
+\subsubsection{Component Description}
 
-\subsubsection{Model Layer}
+\subsubsection*{Model Layer}
 The Model layer encapsulates the game state and physics engine:
 
 \begin{itemize}
@@ -153,7 +137,7 @@ The Model layer encapsulates the game state and physics engine:
     \item \textbf{Monitor (Board)}: Synchronized access ensures atomic game state updates
 \end{itemize}
 
-\subsubsection{Controller Layer}
+\subsubsection*{Controller Layer}
 The Controller comprises two main active components:
 
 \begin{itemize}
@@ -173,7 +157,7 @@ The Controller comprises two main active components:
     \end{itemize}
 \end{itemize}
 
-\subsubsection{View Layer}
+\subsubsection*{View Layer}
 \begin{itemize}
     \item \textbf{ViewFrame}: Swing JFrame managing GUI rendering
     \item \textbf{ViewModel}: Passive data holder with synchronized access
@@ -254,8 +238,21 @@ The game execution follows this sequence:
     \item \textbf{Termination}: Game-over flag set, threads interrupted and stopped
 \end{enumerate}
 
-\section{Behavior Specification: Petri Nets}
+\subsection{Architectural Overview for Task-Based Approach}
 
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.3\textwidth]{images/task-based-architecture.png}
+    \caption{A descriptive caption for your image.}
+    \label{fig:image_label_1}
+\end{figure}
+
+\subsubsection{Component Descriptions}
+\subsubsection*{Task Decomposition}
+
+\subsection{Synchronization Strategy}
+
+\section{Behavior Specification: Petri Nets}
 \subsection{High-Level Game Flow Net}
 
 The overall game behavior is modeled using a Petri Net capturing the major state transitions:
@@ -395,11 +392,11 @@ Three board configurations are tested:
 \hline
 \textbf{Configuration} & \textbf{Small Balls} & \textbf{Expected Complexity} \\
 \hline
-Minimal & 2 & $O(2^2) = 4$ comparisons/frame \\
+Minimal & 2 &  \\
 \hline
-Large & 400 & $O(400^2) \approx 80,000$ comparisons/frame \\
+Large & 400 &  \\
 \hline
-Massive & 4,500 & $O(4,500^2) \approx 10.1M$ comparisons/frame \\
+Massive & 4,500 &  \\
 \hline
 \end{tabular}
 \caption{Board Configurations and Collision Detection Complexity}
@@ -421,7 +418,7 @@ Massive & 4,500 & $O(4,500^2) \approx 10.1M$ comparisons/frame \\
 The sequential implementation exhibits:
 \begin{itemize}
     \item Minimal/Large:  fps (acceptable)
-    \item Massive:  fps (unacceptable frame rate degradation)
+    \item Massive: 2 fps (unacceptable frame rate degradation)
 \end{itemize}
 
 \subsubsection{Concurrent Improvements}
@@ -429,7 +426,7 @@ The sequential implementation exhibits:
 \textbf{Update Thread Parallelization}:
 \begin{itemize}
     \item Potential to parallelize ball state updates (independent operations)
-    \item Potential to parallelize collision detection (embarrassingly parallel)
+    \item Potential to parallelize collision detection
     \item Rendering no longer blocks physics computation
 \end{itemize}
 
@@ -449,7 +446,14 @@ $$S \approx 1 + \frac{(O(n^2) - O(n))}{k}$$
 With $n = 4,500$ balls and $k = 4$ cores:
 $$S \approx 1 + \frac{10.1M - 4,500}{4} \approx 2.5\text{-}2.8\times$$
 
-\subsection{Synchronization Overhead}
+// Note: Actual speedup may be lower due to synchronization overhead and non-parallelizable code sections.
+
+\subsubsection{Task-based Improvements}
+
+
+\subsection{Overhead}
+
+\subsubsection{Multithread overhead}
 
 The monitor-based synchronization introduces overhead:
 
@@ -461,6 +465,8 @@ The monitor-based synchronization introduces overhead:
 \end{itemize}
 
 The overhead is typically offset by parallelization gains in configurations with significant collision detection workload (400+ balls).
+
+\subsubsection{Task-Based overhead}
 
 \section{Formal Verification with JPF}
 
@@ -610,27 +616,6 @@ public class MainJPF {
     }
 }
 \end{lstlisting}
-
-\subsubsection{Verification Scope Limitations}
-
-JPF with bounded depth for practical verification:
-
-\begin{itemize}
-    \item \textbf{Minimal Configuration}: 2 balls $\Rightarrow$ reduced state space
-    \item \textbf{Step Limit}: $50M$ JVM instructions $\Rightarrow$ covers initialization, game loop, termination
-    \item \textbf{Depth Limit}: 10,000 JVM steps $\Rightarrow$ prevents infinite state exploration
-\end{itemize}
-
-\textbf{Result}: Minimal configuration verified to be deadlock-free and race-condition free.
-
-\subsection{Known Limitations}
-
-\begin{itemize}
-    \item \textbf{Physics Simulation}: Floating-point arithmetic not fully verified (JPF has limited FP support)
-    \item \textbf{Graphics Library}: Swing/AWT components not modeled
-    \item \textbf{Large Configurations}: Massive board configs exceed practical JPF state space
-    \item \textbf{Timing Assumptions}: Real-time constraints not verified (JPF is untimed)
-\end{itemize}
 
 \section{Conclusion}
 

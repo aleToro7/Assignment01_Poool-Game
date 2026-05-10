@@ -1,48 +1,53 @@
 \babel@toc {english}{}\relax 
-\contentsline {section}{\numberline {1}Problem Analysis}{2}{section.1}%
-\contentsline {subsection}{\numberline {1.1}Problem Description}{2}{subsection.1.1}%
-\contentsline {subsection}{\numberline {1.2}Concurrency-Related Challenges}{2}{subsection.1.2}%
-\contentsline {subsubsection}{\numberline {1.2.1}Computational Complexity}{2}{subsubsection.1.2.1}%
-\contentsline {subsubsection}{\numberline {1.2.2}Temporal Constraints}{2}{subsubsection.1.2.2}%
-\contentsline {subsubsection}{\numberline {1.2.3}Synchronization Requirements}{2}{subsubsection.1.2.3}%
-\contentsline {subsubsection}{\numberline {1.2.4}Data Races and Race Conditions}{3}{subsubsection.1.2.4}%
-\contentsline {section}{\numberline {2}Design and Architecture}{3}{section.2}%
-\contentsline {subsection}{\numberline {2.1}Architectural Overview}{3}{subsection.2.1}%
-\contentsline {subsection}{\numberline {2.2}Component Description}{3}{subsection.2.2}%
-\contentsline {subsubsection}{\numberline {2.2.1}Model Layer}{3}{subsubsection.2.2.1}%
-\contentsline {subsubsection}{\numberline {2.2.2}Controller Layer}{4}{subsubsection.2.2.2}%
-\contentsline {subsubsection}{\numberline {2.2.3}View Layer}{4}{subsubsection.2.2.3}%
-\contentsline {subsection}{\numberline {2.3}Synchronization Strategy}{4}{subsection.2.3}%
-\contentsline {subsubsection}{\numberline {2.3.1}Monitor-Based Synchronization}{4}{subsubsection.2.3.1}%
-\contentsline {subsubsection}{\numberline {2.3.2}Bot Monitor}{5}{subsubsection.2.3.2}%
-\contentsline {subsubsection}{\numberline {2.3.3}Rendering Synchronization (RenderSync)}{5}{subsubsection.2.3.3}%
-\contentsline {subsection}{\numberline {2.4}Thread Lifecycle}{5}{subsection.2.4}%
-\contentsline {section}{\numberline {3}Behavior Specification: Petri Nets}{6}{section.3}%
-\contentsline {subsection}{\numberline {3.1}High-Level Game Flow Net}{6}{subsection.3.1}%
-\contentsline {subsection}{\numberline {3.2}Update Thread Behavior Net}{6}{subsection.3.2}%
-\contentsline {subsection}{\numberline {3.3}Bot Thread Behavior Net}{7}{subsection.3.3}%
-\contentsline {section}{\numberline {4}Performance Evaluation}{7}{section.4}%
-\contentsline {subsection}{\numberline {4.1}Experimental Setup}{7}{subsection.4.1}%
-\contentsline {subsubsection}{\numberline {4.1.1}Test Configurations}{7}{subsubsection.4.1.1}%
-\contentsline {subsubsection}{\numberline {4.1.2}Performance Metrics}{7}{subsubsection.4.1.2}%
-\contentsline {subsection}{\numberline {4.2}Expected Performance Improvements}{8}{subsection.4.2}%
-\contentsline {subsubsection}{\numberline {4.2.1}Sequential Baseline Issues}{8}{subsubsection.4.2.1}%
-\contentsline {subsubsection}{\numberline {4.2.2}Concurrent Improvements}{8}{subsubsection.4.2.2}%
-\contentsline {subsection}{\numberline {4.3}Synchronization Overhead}{8}{subsection.4.3}%
-\contentsline {section}{\numberline {5}Formal Verification with JPF}{9}{section.5}%
-\contentsline {subsection}{\numberline {5.1}Java Path Finder Integration}{9}{subsection.5.1}%
-\contentsline {subsubsection}{\numberline {5.1.1}JPF Configuration}{9}{subsubsection.5.1.1}%
-\contentsline {subsection}{\numberline {5.2}Safety Properties Verified}{9}{subsection.5.2}%
-\contentsline {subsubsection}{\numberline {5.2.1}1. Mutual Exclusion (No Data Races)}{9}{subsubsection.5.2.1}%
-\contentsline {subsubsection}{\numberline {5.2.2}2. Deadlock Freedom}{9}{subsubsection.5.2.2}%
-\contentsline {subsubsection}{\numberline {5.2.3}3. Liveness (Game Termination)}{10}{subsubsection.5.2.3}%
-\contentsline {subsection}{\numberline {5.3}Race Condition Detection}{10}{subsection.5.3}%
-\contentsline {subsubsection}{\numberline {5.3.1}Synchronized Field Accesses}{10}{subsubsection.5.3.1}%
-\contentsline {subsubsection}{\numberline {5.3.2}Temporal Assertions}{10}{subsubsection.5.3.2}%
-\contentsline {subsection}{\numberline {5.4}Model Checking Results}{11}{subsection.5.4}%
-\contentsline {subsubsection}{\numberline {5.4.1}Test Configuration: MainJPF}{11}{subsubsection.5.4.1}%
-\contentsline {subsubsection}{\numberline {5.4.2}Verification Scope Limitations}{11}{subsubsection.5.4.2}%
-\contentsline {subsection}{\numberline {5.5}Known Limitations}{12}{subsection.5.5}%
-\contentsline {section}{\numberline {6}Conclusion}{12}{section.6}%
-\contentsline {section}{\numberline {A}Code Listings}{12}{appendix.A}%
-\contentsline {subsection}{\numberline {A.1}GameController Main Loop}{12}{subsection.A.1}%
+\contentsline {section}{\numberline {1}Problem Analysis}{3}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Problem Description}{3}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Concurrency-Related Challenges}{3}{subsection.1.2}%
+\contentsline {subsubsection}{\numberline {1.2.1}Computational Complexity}{3}{subsubsection.1.2.1}%
+\contentsline {subsubsection}{\numberline {1.2.2}Temporal Constraints}{3}{subsubsection.1.2.2}%
+\contentsline {subsubsection}{\numberline {1.2.3}Synchronization Requirements}{3}{subsubsection.1.2.3}%
+\contentsline {subsubsection}{\numberline {1.2.4}Data Races and Race Conditions}{4}{subsubsection.1.2.4}%
+\contentsline {subsection}{\numberline {1.3}Task-based Related Challenges}{4}{subsection.1.3}%
+\contentsline {subsubsection}{\numberline {1.3.1}Computational Complexity}{4}{subsubsection.1.3.1}%
+\contentsline {subsubsection}{\numberline {1.3.2}Temporal Constraints}{4}{subsubsection.1.3.2}%
+\contentsline {subsubsection}{\numberline {1.3.3}Synchronization Requirements}{4}{subsubsection.1.3.3}%
+\contentsline {section}{\numberline {2}Design and Architecture}{4}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Architectural Overview for Multithreading}{4}{subsection.2.1}%
+\contentsline {subsubsection}{\numberline {2.1.1}Component Description}{5}{subsubsection.2.1.1}%
+\contentsline {subsection}{\numberline {2.2}Synchronization Strategy}{6}{subsection.2.2}%
+\contentsline {subsubsection}{\numberline {2.2.1}Monitor-Based Synchronization}{6}{subsubsection.2.2.1}%
+\contentsline {subsubsection}{\numberline {2.2.2}Bot Monitor}{6}{subsubsection.2.2.2}%
+\contentsline {subsubsection}{\numberline {2.2.3}Rendering Synchronization (RenderSync)}{6}{subsubsection.2.2.3}%
+\contentsline {subsection}{\numberline {2.3}Thread Lifecycle}{7}{subsection.2.3}%
+\contentsline {subsection}{\numberline {2.4}Architectural Overview for Task-Based Approach}{7}{subsection.2.4}%
+\contentsline {subsubsection}{\numberline {2.4.1}Component Descriptions}{8}{subsubsection.2.4.1}%
+\contentsline {subsection}{\numberline {2.5}Synchronization Strategy}{8}{subsection.2.5}%
+\contentsline {section}{\numberline {3}Behavior Specification: Petri Nets}{8}{section.3}%
+\contentsline {subsection}{\numberline {3.1}High-Level Game Flow Net}{8}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Update Thread Behavior Net}{8}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Bot Thread Behavior Net}{9}{subsection.3.3}%
+\contentsline {section}{\numberline {4}Performance Evaluation}{9}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Experimental Setup}{9}{subsection.4.1}%
+\contentsline {subsubsection}{\numberline {4.1.1}Test Configurations}{9}{subsubsection.4.1.1}%
+\contentsline {subsubsection}{\numberline {4.1.2}Performance Metrics}{9}{subsubsection.4.1.2}%
+\contentsline {subsection}{\numberline {4.2}Expected Performance Improvements}{10}{subsection.4.2}%
+\contentsline {subsubsection}{\numberline {4.2.1}Sequential Baseline Issues}{10}{subsubsection.4.2.1}%
+\contentsline {subsubsection}{\numberline {4.2.2}Concurrent Improvements}{10}{subsubsection.4.2.2}%
+\contentsline {subsubsection}{\numberline {4.2.3}Task-based Improvements}{10}{subsubsection.4.2.3}%
+\contentsline {subsection}{\numberline {4.3}Overhead}{10}{subsection.4.3}%
+\contentsline {subsubsection}{\numberline {4.3.1}Multithread overhead}{10}{subsubsection.4.3.1}%
+\contentsline {subsubsection}{\numberline {4.3.2}Task-Based overhead}{11}{subsubsection.4.3.2}%
+\contentsline {section}{\numberline {5}Formal Verification with JPF}{11}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Java Path Finder Integration}{11}{subsection.5.1}%
+\contentsline {subsubsection}{\numberline {5.1.1}JPF Configuration}{11}{subsubsection.5.1.1}%
+\contentsline {subsection}{\numberline {5.2}Safety Properties Verified}{11}{subsection.5.2}%
+\contentsline {subsubsection}{\numberline {5.2.1}1. Mutual Exclusion (No Data Races)}{11}{subsubsection.5.2.1}%
+\contentsline {subsubsection}{\numberline {5.2.2}2. Deadlock Freedom}{11}{subsubsection.5.2.2}%
+\contentsline {subsubsection}{\numberline {5.2.3}3. Liveness (Game Termination)}{12}{subsubsection.5.2.3}%
+\contentsline {subsection}{\numberline {5.3}Race Condition Detection}{12}{subsection.5.3}%
+\contentsline {subsubsection}{\numberline {5.3.1}Synchronized Field Accesses}{12}{subsubsection.5.3.1}%
+\contentsline {subsubsection}{\numberline {5.3.2}Temporal Assertions}{12}{subsubsection.5.3.2}%
+\contentsline {subsection}{\numberline {5.4}Model Checking Results}{13}{subsection.5.4}%
+\contentsline {subsubsection}{\numberline {5.4.1}Test Configuration: MainJPF}{13}{subsubsection.5.4.1}%
+\contentsline {section}{\numberline {6}Conclusion}{13}{section.6}%
+\contentsline {section}{\numberline {A}Code Listings}{14}{appendix.A}%
+\contentsline {subsection}{\numberline {A.1}GameController Main Loop}{14}{subsection.A.1}%
