@@ -101,9 +101,119 @@ Without proper synchronization, the following race conditions can occur:
 \end{itemize}
 
 \subsection{Task-based Related Challenges}
+The task-based concurrent implementation using the Executor Framework introduces a different 
+set of challenges compared to the thread-per-entity model. 
+The Poool implementation uses work-stealing task decomposition via \texttt{WorkerPool} to parallelize physics 
+updates and collision detection.
 \subsubsection{Computational Complexity}
+Task-based parallelism in the Poool implementation must address several complexity-related challenges:
+ 
+\begin{itemize}
+    \item \textbf{Task Granularity Trade-off}: 
+    \begin{itemize}
+        \item Fine-grained tasks (small chunk size) improve load balancing but increase task creation and scheduling overhead
+        \item In \texttt{WorkerPool}, each task updates balls in range $[i, i+\text{chunkSize})$, where chunk size is computed as $\text{chunkSize} = \max(1, n/k)$ with $k = 2 \cdot \text{numProcessors}$
+    \end{itemize}
+    
+    \item \textbf{Collision Detection Complexity}:
+    \begin{itemize}
+        \item \texttt{CollisionTask} must verify all pairs $(i,j)$ with $i < j$ without duplication
+        \item Naive task decomposition (dividing range $[0, n)$) would create $O(n^2)$ pair computations
+        \item Current implementation partitions the range $[i_0, i_1)$ and checks each task's range against \textit{all} other balls: $\sum_{i=i_0}^{i_1} (n - i - 1)$ comparisons per task
+        \item Actual complexity per task is $O((i_1-i_0) \cdot n)$, not $O((i_1-i_0)^2)$
+    \end{itemize}
+    
+    \item \textbf{Memory Bandwidth Saturation}:
+    \begin{itemize}
+        \item Task-based approach requires all workers to read shared Ball objects' position/velocity data
+        \item With $k$ cores simultaneously accessing the same memory region, cache line contention increases
+        \item ConcurrentHashMap operations on \texttt{lastTouchedBy} introduce additional memory traffic
+    \end{itemize}
+    
+    \item \textbf{Synchronization Overhead in Collision Detection}:
+    \begin{itemize}
+        \item Each collision check acquires locks on two Ball objects using \texttt{synchronized(first)} then \texttt{synchronized(second)}
+        \item Lock ordering (by \texttt{System.identityHashCode()}) prevents deadlock but adds comparison overhead
+    \end{itemize}
+\end{itemize}
+
 \subsubsection{Temporal Constraints}
+Task-based parallelism introduces timing-related constraints that differ from the thread-per-entity model:
+ 
+\begin{itemize}
+    \item \textbf{Barrier Synchronization Latency}:
+    \begin{itemize}
+        \item In \texttt{WorkerPool}, both \texttt{parallelBallUpdate()} and \texttt{parallelCollisionDetection()} use \texttt{invokeAll()}, which is a synchronization barrier
+        \item All tasks must complete before control returns to the GameLoop
+        \item Frame time = max(task duration) + overhead, not sum(task durations) / k
+    \end{itemize}
+    
+    \item \textbf{Task Queue Delay}:
+    \begin{itemize}
+        \item Created tasks are submitted to the ExecutorService queue
+        \item If all workers are busy, new tasks wait in queue, delaying their execution
+        \item With a fixed thread pool of size $k$, tasks may experience queueing delay proportional to queue depth
+        \item This adds non-deterministic latency to each game frame
+    \end{itemize}
+    
+    \item \textbf{Future.get() Blocking Behavior}:
+    \begin{itemize}
+        \item The main GameLoop thread calls \texttt{f.get()} (code in class \texttt{WorkerPool}) on all futures from \texttt{invokeAll()}
+        \item This is a blocking operation---the GameLoop cannot proceed until \textit{all} tasks complete
+        \item Any uncaught exception in a task will be re-thrown at \texttt{get()}, potentially crashing the loop
+    \end{itemize}
+\end{itemize}
+
 \subsubsection{Synchronization Requirements}
+Task-based parallelism requires careful synchronization to ensure memory consistency and avoid data races:
+ 
+\begin{itemize}
+    \item \textbf{Nested Lock Acquisition in Collision Detection}:
+    \begin{itemize}
+        \item \texttt{CollisionTask.call()} must synchronize on two Ball objects to resolve collisions atomically:
+        \begin{lstlisting}[language=Java, caption=Ordered Lock Acquisition]
+synchronized (first) {
+    synchronized (second) {
+        // Atomic collision resolution
+        Ball.resolveCollision(a, b);
+    }
+}
+        \end{lstlisting}
+        \item The ordering by \texttt{System.identityHashCode()} prevents deadlock but adds computational cost
+        \item If two tasks try to resolve the same collision pair with different order, one will block the other
+    \end{itemize}
+    
+    \item \textbf{ConcurrentHashMap for lastTouchedBy}:
+    \begin{itemize}
+        \item Multiple \texttt{CollisionTask} instances concurrently update \texttt{lastTouchedBy} map via \texttt{put()} calls
+        \item Using a non-concurrent map would cause data races
+        \item ConcurrentHashMap uses bucket-level locking (segment locking), reducing contention vs. a single global lock
+        \item However, repeated \texttt{put()} calls on the same Ball key still incur synchronization overhead
+    \end{itemize}
+    
+    \item \textbf{Read-Write Visibility}:
+    \begin{itemize}
+        \item After \texttt{invokeAll().get()}, all field writes in tasks are visible to the main GameLoop (happens-before guarantee)
+        \item The Java Memory Model ensures that synchronization actions (lock acquire/release) create memory barriers
+        \item Without these barriers, updates to Ball.vel and Ball.pos made by one task might not be visible to the next phase
+    \end{itemize}
+    
+    \item \textbf{Task Isolation}:
+    \begin{itemize}
+        \item \texttt{BallUpdateTask} accesses \texttt{board} (the Board object) to query boundary constraints
+        \item This creates a shared dependency: if Board is modified during task execution, physics updates may read stale boundary data
+        \item Current implementation assumes Board state (bounds, player positions) is immutable during a phase
+        \item If asynchronous modifications occur (e.g., player ball movement), visibility must be explicitly synchronized
+    \end{itemize}
+    
+    \item \textbf{Exception Handling and Task Failure}:
+    \begin{itemize}
+        \item If a task throws an unchecked exception, \texttt{f.get()} will re-throw it via \texttt{ExecutionException}
+        \item The GameLoop must handle \texttt{InterruptedException} (task thread interrupted) and \texttt{ExecutionException} (task computation failed)
+        \item Without proper handling, the entire game loop may crash
+        \item Current implementation in \texttt{GameLoop.run()} catches both exceptions and breaks the loop gracefully
+    \end{itemize}
+\end{itemize}
 
 \section{Design and Architecture}
 
