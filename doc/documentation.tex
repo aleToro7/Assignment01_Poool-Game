@@ -349,6 +349,11 @@ The game execution follows this sequence:
 \end{enumerate}
 
 \subsection{Architectural Overview for Task-Based Approach}
+The task-based concurrent implementation differs fundamentally from the thread-per-entity
+ model. Rather than creating persistent threads for each game component, 
+ this approach uses the \textbf{Executor Framework} with a fixed-size thread pool to parallelize computation-heavy 
+ phases of the game loop. The \texttt{GameLoop} acts as a master coordinator, delegating parallelizable tasks to a \texttt{WorkerPool} abstraction 
+ that encapsulates all ExecutorService details.
 
 \begin{figure}[h!]
     \centering
@@ -357,10 +362,280 @@ The game execution follows this sequence:
     \label{fig:image_label_1}
 \end{figure}
 
+The execution follows a structured three-phase pattern within each game loop iteration:
+ 
+\begin{enumerate}
+    \item \textbf{Phase 1 (Parallel Ball Physics)}: \texttt{workerPool.parallelBallUpdate()} distributes ball state updates across worker threads
+    \item \textbf{Phase 2 (Parallel Collision Detection)}: \texttt{workerPool.parallelCollisionDetection()} distributes pairwise collision checks
+    \item \textbf{Phase 3 (Sequential Player \& Hole Logic)}: \texttt{board.resolvePlayerCollisionsAndHoles()} executes serially on the main GameLoop thread
+\end{enumerate}
+ 
+This hybrid approach balances parallelism for expensive operations with simplicity for complex state dependencies.
 \subsubsection{Component Descriptions}
+The task-based architecture consists of the following key components:
+ 
+\subsubsection*{GameLoop (Master/Orchestrator Thread)}
+ 
+The \texttt{GameLoop} extends \texttt{Thread} and serves as the main control flow:
+ 
+\begin{itemize}
+    \item \textbf{Role}: Central orchestrator managing game state, input handling, and task delegation
+    \item \textbf{Responsibilities}:
+    \begin{itemize}
+        \item Maintains the main game loop (while !board.isGameOver())
+        \item Manages non-blocking input via \texttt{BlockingQueue<V2d> inputQueue}
+        \item Delegates parallelizable phases to WorkerPool
+        \item Executes sequential phase (player/hole collisions) exclusively
+        \item Handles rendering synchronization and frame rate
+        \item Catches \texttt{ExecutionException} and \texttt{InterruptedException} from worker tasks
+    \end{itemize}
+    \item \textbf{Key Code Pattern}:
+    \begin{lstlisting}[language=Java, caption=GameLoop Main Loop Structure]
+while (!board.isGameOver()) {
+    V2d impulse = inputQueue.poll(); // Non-blocking input
+    
+    // Phase 1: Parallel physics
+    workerPool.parallelBallUpdate(board.getBalls(), elapsed, board);
+    
+    // Sequential player logic
+    if (board.getPlayer1() != null) 
+        board.getPlayer1().updateState(elapsed, board);
+    
+    // Phase 2: Parallel collision detection
+    workerPool.parallelCollisionDetection(board.getBalls(), 
+        board.getLastTouchedBy());
+    
+    // Phase 3: Sequential resolution
+    board.resolvePlayerCollisionsAndHoles();
+    
+    // Render
+    viewModel.update(board, fps);
+    view.render();
+}
+    \end{lstlisting}
+\end{itemize}
+ 
+\subsubsection*{WorkerPool (Task Coordinator Abstraction)}
+ 
+The \texttt{WorkerPool} encapsulates all ExecutorService framework details from the GameLoop:
+ 
+\begin{itemize}
+    \item \textbf{Role}: Hides complexity of task scheduling, execution, and synchronization
+    \item \textbf{Internal Structure}:
+    \begin{itemize}
+        \item \texttt{ExecutorService executor}: Fixed thread pool with size $k = 2 \times \text{availableProcessors}$
+        \item Two public methods: \texttt{parallelBallUpdate()} and \texttt{parallelCollisionDetection()}
+        \item Both use \texttt{invokeAll()} for barrier synchronization
+    \end{itemize}
+    \item \textbf{Key Guarantee}: The GameLoop does not import \texttt{java.util.concurrent.*}, maintaining clean separation of concerns
+    \item \textbf{Exception Propagation}: Exceptions in tasks are bundled into \texttt{ExecutionException} and re-thrown at \texttt{f.get()}
+\end{itemize}
+ 
+\subsubsection*{BallUpdateTask (Parallel Worker)}
+ 
+Implements \texttt{Callable<Void>} to update a range of balls' physics state:
+ 
+\begin{itemize}
+    \item \textbf{Input Parameters}:
+    \begin{itemize}
+        \item \texttt{List<Ball> balls}: Shared reference to all balls
+        \item \texttt{int from, int to}: Range $[from, to)$ of balls this task processes
+        \item \texttt{long dt}: Elapsed time since last frame
+        \item \texttt{Board board}: Context for boundary constraints
+    \end{itemize}
+    \item \textbf{Computation}:
+    \begin{lstlisting}[language=Java, caption=BallUpdateTask Execution]
+public Void call() {
+    for (int i = from; i < to; i++) {
+        balls.get(i).updateState(dt, board);
+    }
+    return null;
+}
+    \end{lstlisting}
+    \item \textbf{Synchronization}: No locks required; each task reads from distinct list indices and modifies only the Ball objects at those indices. The Board's boundary data is assumed immutable during execution.
+\end{itemize}
+ 
+\subsubsection*{CollisionTask (Parallel Worker)}
+ 
+Implements \texttt{Callable<Void>} to resolve pairwise ball collisions:
+ 
+\begin{itemize}
+    \item \textbf{Input Parameters}:
+    \begin{itemize}
+        \item \texttt{List<Ball> balls}: Shared reference to all balls
+        \item \texttt{int from, int to}: Range $[from, to)$ of "first" balls in pairs
+        \item \texttt{ConcurrentHashMap<Ball, Integer> lastTouchedBy}: Shared map of ball-to-player touches
+    \end{itemize}
+    \item \textbf{Pair Enumeration}: For each ball $i \in [from, to)$, checks pairs $(i, j)$ where $j \in [i+1, n)$
+    \item \textbf{Synchronization Protocol}:
+    \begin{lstlisting}[language=Java, caption=Ordered Lock Acquisition in CollisionTask]
+for (int i = from; i < to; i++) {
+    for (int j = i + 1; j < n; j++) {
+        Ball a = balls.get(i);
+        Ball b = balls.get(j);
+        
+        // Ordered lock acquisition (deadlock prevention)
+        Ball first = System.identityHashCode(a) <= System.identityHashCode(b) ? a : b;
+        Ball second = (first == a) ? b : a;
+        
+        synchronized (first) {
+            synchronized (second) {
+                Ball.resolveCollision(a, b);
+                // Update lastTouchedBy if collision occurred
+                if (velocities changed) {
+                    lastTouchedBy.put(a, 0);
+                    lastTouchedBy.put(b, 0);
+                }
+            }
+        }
+    }
+}
+    \end{lstlisting}
+    \item \textbf{Fine-Grained Locking}: Each pair's collision resolution is protected by locks on both Ball objects, but independent pairs may execute concurrently.
+\end{itemize}
+ 
+\subsubsection*{InputQueue (Asynchronous Communication)}
+ 
+A \texttt{BlockingQueue<V2d>} enables the Event Dispatch Thread (EDT) to communicate impulses without blocking the GameLoop:
+ 
+\begin{itemize}
+    \item \textbf{Producer}: KeyListener on EDT calls \texttt{gameLoop.notifyInput(v2d)}
+    \item \textbf{Consumer}: GameLoop calls \texttt{inputQueue.poll()} (non-blocking) each frame
+    \item \textbf{Thread-Safety}: BlockingQueue is intrinsically thread-safe; no additional synchronization needed
+\end{itemize}
+
 \subsubsection*{Task Decomposition}
+Task decomposition in the Poool implementation follows a \textbf{range-partitioning} strategy:
+ 
+\begin{itemize}
+    \item \textbf{Chunk Size Calculation}:
+    \begin{lstlisting}[language=Java, caption=Chunk Size Computation in WorkerPool]
+int nWorkers = Runtime.getRuntime().availableProcessors() * 2;
+int chunkSize = Math.max(1, n / nWorkers);
+    \end{lstlisting}
+    where $n$ is the number of balls. This ensures:
+    \begin{itemize}
+        \item If $n = 4500$ balls and $k = 8$ cores (16 workers), chunk size $\approx 281$ balls per task
+        \item Minimum chunk size of 1 prevents empty tasks
+        \item Factor of 2 overprovisioning creates more granularity for load balancing
+    \end{itemize}
+    
+    \item \textbf{Ball Update Decomposition}:
+    \begin{lstlisting}[language=Java, caption=Ball Update Task Creation]
+var tasks = new ArrayList<BallUpdateTask>();
+for (int i = 0; i < n; i += chunkSize) {
+    tasks.add(new BallUpdateTask(balls, i, Math.min(i + chunkSize, n), dt, board));
+}
+List<Future<Void>> futures = executor.invokeAll(tasks);
+for (Future<Void> f : futures) f.get();
+    \end{lstlisting}
+    This creates roughly $\lceil n / \text{chunkSize} \rceil$ tasks, which is typically $2k$ tasks for $k$ cores.
+    
+    \item \textbf{Collision Detection Decomposition}:
+    \begin{lstlisting}[language=Java, caption=Collision Task Creation]
+var tasks = new ArrayList<CollisionTask>();
+for (int i = 0; i < n; i += chunkSize) {
+    tasks.add(new CollisionTask(balls, i, Math.min(i + chunkSize, n), lastTouchedBy));
+}
+    \end{lstlisting}
+    Each task is responsible for checking all pairs starting from its range against all other balls.
+    
+    \item \textbf{Load Imbalance in Collision Detection}:
+    \begin{itemize}
+        \item Task $i$ checks $\sum_{idx=i_0}^{i_1} (n - idx - 1)$ pairs
+        \item For the first chunk (indices $0$ to chunkSize): $\approx \text{chunkSize} \times n - \text{chunkSize}^2/2$ pairs
+        \item For the last chunk: $\approx 0$ pairs (no ball after it to check)
+        \item This creates significant load imbalance, with early tasks doing $O(n \times \text{chunkSize})$ work and later tasks doing $O(\text{chunkSize}^2)$
+    \end{itemize}
+\end{itemize}
 
 \subsection{Synchronization Strategy}
+Task-based synchronization employs a layered strategy combining barrier synchronization with fine-grained locking:
+ 
+\subsubsection{Barrier Synchronization via invokeAll()}
+ 
+Both parallel phases use \texttt{ExecutorService.invokeAll()}, which provides implicit barrier semantics:
+ 
+\begin{itemize}
+    \item \textbf{Behavior}: Blocks until \textit{all} submitted tasks complete
+    \item \textbf{Java Memory Model Guarantee}: All field writes in tasks are visible after invokeAll() returns (happens-before relationship)
+    \item \textbf{Game Loop Implications}:
+    \begin{itemize}
+        \item Phase 1 completes $\implies$ all ball positions/velocities updated and visible
+        \item Phase 2 completes $\implies$ all collision resolutions applied and visible
+        \item Sequential Phase 3 executes with consistent global state
+    \end{itemize}
+    \item \textbf{Performance Cost}: Tail latency --- the slowest task determines phase duration
+\end{itemize}
+ 
+\subsubsection{Fine-Grained Ball Locking in Collision Detection}
+ 
+CollisionTask uses nested synchronized blocks to prevent data races during collision resolution:
+ 
+\begin{itemize}
+    \item \textbf{Why Two Locks}: Each \texttt{Ball.resolveCollision(a, b)} modifies both Ball objects' velocity and position. Without synchronization, a concurrent update might corrupt the ball state.
+    \item \textbf{Deadlock Prevention via Ordering}:
+    \begin{itemize}
+        \item All code acquires locks in a consistent order: always lock Ball A before Ball B if identityHashCode(A) $\leq$ identityHashCode(B)
+        \item Since identity hash codes are fixed per object, this prevents circular wait (requirement for deadlock)
+    \end{itemize}
+    \item \textbf{Lock Contention}: Multiple tasks may compete for the same Ball locks
+    \begin{itemize}
+        \item If two tasks both need to resolve collisions involving the same Ball, one task waits
+        \item This serializes independent collisions unnecessarily, but ensures safety
+        \item In practice, contention is moderate since each task processes a different range of "first" balls
+    \end{itemize}
+\end{itemize}
+ 
+\subsubsection{ConcurrentHashMap for Shared State}
+ 
+The \texttt{lastTouchedBy} map is a \texttt{ConcurrentHashMap<Ball, Integer>} to allow concurrent updates from multiple CollisionTask instances:
+ 
+\begin{itemize}
+    \item \textbf{Concurrent Put Operations}: Multiple tasks call \texttt{lastTouchedBy.put(ball, 0)} simultaneously
+    \item \textbf{Bucket-Level Locking}: ConcurrentHashMap uses segment-based locking (in modern Java, striped locking)
+    \begin{itemize}
+        \item Reduces contention compared to a single global synchronized lock
+        \item Different Ball keys typically hash to different buckets, allowing concurrent puts
+        \item Same-bucket updates still serialize
+    \end{itemize}
+    \item \textbf{Visibility Guarantee}: All puts are visible globally via ConcurrentHashMap's internal synchronization
+\end{itemize}
+ 
+\subsubsection{Exception Handling and Reliability}
+ 
+Task-based execution requires careful exception handling to prevent loop crashes:
+ 
+\begin{itemize}
+    \item \textbf{ExecutionException}: If a task throws an unchecked exception, \texttt{f.get()} re-throws it wrapped in ExecutionException
+    \item \textbf{InterruptedException}: If the GameLoop thread is interrupted (e.g., window closed), waiting on futures throws InterruptedException
+    \item \textbf{GameLoop Protection}:
+    \begin{lstlisting}[language=Java, caption=Exception Handling in GameLoop]
+try {
+    workerPool.parallelBallUpdate(board.getBalls(), elapsed, board);
+    workerPool.parallelCollisionDetection(board.getBalls(), 
+        board.getLastTouchedBy());
+} catch (InterruptedException | ExecutionException e) {
+    Thread.currentThread().interrupt();
+    break; // Exit game loop gracefully
+}
+    \end{lstlisting}
+    \item \textbf{Graceful Degradation}: Catching exceptions allows the game loop to terminate cleanly rather than crashing the entire JVM
+\end{itemize}
+ 
+\subsubsection{Memory Visibility and Happens-Before Guarantees}
+ 
+The Java Memory Model ensures correctness through explicit synchronization points:
+ 
+\begin{enumerate}
+    \item \textbf{Task Submission}: When a task is submitted to the executor, all field writes in the GameLoop thread are visible to the task
+    \item \textbf{Task Execution}: Workers read shared Ball objects and Board state; without locks, visibility is not guaranteed
+    \item \textbf{invokeAll() Barrier}: When invokeAll() returns, all task writes are visible to the GameLoop thread
+    \item \textbf{Nested Locks in Collisions}: Each \texttt{synchronized} block creates a memory barrier, ensuring Ball field updates are visible across tasks
+\end{enumerate}
+ 
+This ensures that despite the distributed nature of tasks, the game state remains consistent across phase boundaries.
+ 
 
 \section{Behavior Specification: Petri Nets}
 \subsection{High-Level Game Flow Net}
