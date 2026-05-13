@@ -2,6 +2,7 @@ package pcd.assignment01.controller;
 
 import pcd.assignment01.controller.tasks.BallUpdateTask;
 import pcd.assignment01.controller.tasks.CollisionTask;
+import pcd.assignment01.controller.tasks.PlayerCollisionTask;
 import pcd.assignment01.model.Ball;
 import pcd.assignment01.model.Board;
 
@@ -11,7 +12,7 @@ import java.util.concurrent.*;
 
 /**
  * Incapsula tutti i dettagli del Java Executor Framework.
- * Il GameLoop (master) non vede ExecutorService, Future, né invokeAll.
+ * Il GameLoop (master) non vede ExecutorService, Future, o invokeAll.
  */
 public class WorkerPool {
 
@@ -49,6 +50,25 @@ public class WorkerPool {
 
         for (int i = 0; i < n; i += chunkSize) {
             tasks.add(new CollisionTask(balls, i, Math.min(i + chunkSize, n), lastTouchedBy));
+        }
+
+        List<Future<Void>> futures = executor.invokeAll(tasks);
+        for (Future<Void> f : futures)
+            f.get();
+    }
+
+    public void parallelPlayerCollision(List<Ball> balls,
+            Ball player1, Ball player2,
+            ConcurrentHashMap<Ball, Integer> lastTouchedBy)
+            throws InterruptedException, ExecutionException {
+
+        int n = balls.size();
+        int chunkSize = Math.max(1, n / nWorkers);
+        var tasks = new ArrayList<PlayerCollisionTask>();
+
+        for (int i = 0; i < n; i += chunkSize) {
+            tasks.add(new PlayerCollisionTask(balls, i, Math.min(i + chunkSize, n),
+                    player1, player2, lastTouchedBy));
         }
 
         List<Future<Void>> futures = executor.invokeAll(tasks);

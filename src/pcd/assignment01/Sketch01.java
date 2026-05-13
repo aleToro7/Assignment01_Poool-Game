@@ -82,7 +82,7 @@ public class Sketch01 {
 
 			long elapsed = System.currentTimeMillis() - lastUpdateTime;
 			lastUpdateTime = System.currentTimeMillis();
-			board.updateState(elapsed);
+			// board.updateState(elapsed);
 
 			/* render */
 

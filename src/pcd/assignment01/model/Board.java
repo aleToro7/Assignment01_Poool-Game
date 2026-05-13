@@ -48,50 +48,6 @@ public class Board {
         bounds = conf.getBoardBoundary();
     }
 
-    public void updateState(long dt) {
-        // Se la partita è finita, blocchiamo la fisica (il gioco si "congela")
-        if (isGameOver) return;
-
-        if (player1 != null) player1.updateState(dt, this);
-        if (player2 != null) player2.updateState(dt, this);
-
-        for (var b: balls) {
-            b.updateState(dt, this);
-        }
-
-        for (int i = 0; i < balls.size() - 1; i++) {
-            for (int j = i + 1; j < balls.size(); j++) {
-                Ball b1 = balls.get(i);
-                Ball b2 = balls.get(j);
-
-                V2d v1Prima = b1.getVel();
-                V2d v2Prima = b2.getVel();
-
-                /*
-                * Risolviamo la collisione tra le palline:
-                * Se due palline piccole si urtano tra loro, l'ultimo tocco di entrambe
-                * viene azzerato (valore 0).
-                * Questo evita che un punto venga assegnato se una pallina tocca
-                * un'altra prima di entrare in buca.
-                * */
-                Ball.resolveCollision(b1, b2);
-
-                if (!b1.getVel().equals(v1Prima) || !b2.getVel().equals(v2Prima)) {
-                    lastTouchedBy.put(b1, 0);
-                    lastTouchedBy.put(b2, 0);
-                }
-            }
-        }
-
-        /*
-        * Collisione player-pallina:
-        * La velocità della pallina prima e dopo la collisione viene confrontata:
-        * se è cambiata, significa che c'è stato un impatto reale,
-        * e si registra quel giocatore come ultimo che ha toccato la pallina.
-        * */
-        resolvePlayerCollisionsAndHoles();
-    }
-
     private void checkHoles() {
         P2d hole1Pos = new P2d(bounds.x0(), bounds.y1());
         P2d hole2Pos = new P2d(bounds.x1(), bounds.y1());
@@ -143,25 +99,20 @@ public class Board {
         }
     }
 
-    // (le fasi 1 e 2 vengono gestite dal GameLoop tramite i task)
-    public void resolvePlayerCollisionsAndHoles() {
-        List<Ball> ballsCopy = new ArrayList<>(balls);
-        for (var b : ballsCopy) {
-            if (player1 != null) {
-                V2d vPrima = b.getVel();
-                Ball.resolveCollision(player1, b);
-                if (!b.getVel().equals(vPrima)) lastTouchedBy.put(b, 1);
-            }
-            if (player2 != null) {
-                V2d vPrima = b.getVel();
-                Ball.resolveCollision(player2, b);
-                if (!b.getVel().equals(vPrima)) lastTouchedBy.put(b, 2);
-            }
-        }
+    /**
+     * Metodo pubblico per controllare buche e fine partita.
+     * Usato da GameLoop dopo la parallelizzazione della collisione player-palle.
+     */
+    public void checkHolesAndEndGame() {
+        // FASE B: Collisione player-player (sequenziale, operazione singola)
         if (player1 != null && player2 != null) {
             Ball.resolveCollision(player1, player2);
         }
+        
+        // Controllo buche e rimozione palle (sequenziale)
         checkHoles();
+        
+        // Verifica fine partita (sequenziale)
         checkEndGame();
     }
 

@@ -14,13 +14,12 @@ public class GameLoop extends Thread {
     private final Board board;
     private final ViewModel viewModel;
     private final View view;
-    private final WorkerPool workerPool; // ← solo questa astrazione
+    private final WorkerPool workerPool; 
 
-    // Nessun import di java.util.concurrent.* nel master
     private final BlockingQueue<V2d> inputQueue = new LinkedBlockingQueue<>();
 
     public GameLoop(BoardConf conf, ViewModel viewModel, View view) {
-        this.workerPool = new WorkerPool(); // ← non sa che è un thread pool
+        this.workerPool = new WorkerPool();
         this.board      = new Board();
         this.board.init(conf);
         this.viewModel  = viewModel;
@@ -64,17 +63,19 @@ public class GameLoop extends Thread {
             lastUpdateTime  = System.currentTimeMillis();
 
             try {
-                // FASE 1 — il master delega senza sapere come
+                // FASE 1 — il master delega l'aggiornamento della fisica delle palline al WorkerPool (parallelizzato)
                 workerPool.parallelBallUpdate(board.getBalls(), elapsed, board);
 
                 if (board.getPlayer1() != null) board.getPlayer1().updateState(elapsed, board);
                 if (board.getPlayer2() != null) board.getPlayer2().updateState(elapsed, board);
 
-                // FASE 2
+                // FASE 2 — master delega la rilevazione delle collisioni tra palline al WorkerPool (parallelizzato)
                 workerPool.parallelCollisionDetection(board.getBalls(), board.getLastTouchedBy());
 
-                // FASE 3 — sequenziale, rimane nel master
-                board.resolvePlayerCollisionsAndHoles();
+                // FASE 3 — collisioni player-palline (parallelizzate) 
+                workerPool.parallelPlayerCollision(board.getBalls(), board.getPlayer1(), board.getPlayer2(), board.getLastTouchedBy());
+                
+                board.checkHolesAndEndGame();
 
             } catch (InterruptedException | ExecutionException e) {
                 Thread.currentThread().interrupt();
