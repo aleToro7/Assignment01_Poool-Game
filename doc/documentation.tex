@@ -62,7 +62,6 @@ The Poool Game is a two-player billiard-like game on a 2D board with the followi
     \item \textbf{Physics Simulation}: Elastic collisions, friction forces, and momentum transfer between bodies
     \item \textbf{Players}: Two players (human controlled via keyboard, bot controlled autonomously) with scoring systems
     \item \textbf{Game Objective}: Insert small balls into holes at board corners; winner is determined by score or by eliminating opponent's ball
-    \item \textbf{Performance Bottlenecks}: The sequential version of Poool exhibits several performance bottlenecks that motivate concurrent design:
 \end{itemize}
 
 \subsection{Concurrency-Related Challenges}
@@ -131,9 +130,21 @@ Task-based parallelism in the Poool implementation must address several complexi
     \end{itemize}
     
     \item \textbf{Synchronization Overhead in Collision Detection}:
+    
+    \begin{lstlisting}[language=Java, caption=Ordered Lock Acquisition]
+    synchronized (first) {
+        synchronized (second) {
+            // Atomic collision resolution
+            Ball.resolveCollision(a, b);
+        }
+    }
+        \end{lstlisting}
+
     \begin{itemize}
         \item Each collision check acquires locks on two Ball objects using \texttt{synchronized(first)} then \texttt{synchronized(second)}
         \item Lock ordering (by \texttt{System.identityHashCode()}) prevents deadlock but adds comparison overhead
+        \item If two tasks try to resolve the same collision pair with different order, one will block the other
+
     \end{itemize}
 \end{itemize}
 
@@ -143,9 +154,9 @@ Task-based parallelism introduces timing-related constraints that differ from th
 \begin{itemize}
     \item \textbf{Barrier Synchronization Latency}:
     \begin{itemize}
-        \item In \texttt{WorkerPool}, both \texttt{parallelBallUpdate()} and \texttt{parallelCollisionDetection()} use \texttt{invokeAll()}, which is a synchronization barrier
+        \item In \texttt{WorkerPool}, \texttt{PlayerCollisionTask}, \texttt{parallelBallUpdate()} and \texttt{parallelCollisionDetection()} use \texttt{invokeAll()}, which is a synchronization barrier
         \item All tasks must complete before control returns to the GameLoop
-        \item Frame time = max(task duration) + overhead, not sum(task durations) / k
+        \item Frame time = max(task duration) + overhead
     \end{itemize}
     
     \item \textbf{Task Queue Delay}:
@@ -168,20 +179,6 @@ Task-based parallelism introduces timing-related constraints that differ from th
 Task-based parallelism requires careful synchronization to ensure memory consistency and avoid data races:
  
 \begin{itemize}
-    \item \textbf{Nested Lock Acquisition in Collision Detection}:
-    \begin{itemize}
-        \item \texttt{CollisionTask.call()} must synchronize on two Ball objects to resolve collisions atomically:
-        \begin{lstlisting}[language=Java, caption=Ordered Lock Acquisition]
-synchronized (first) {
-    synchronized (second) {
-        // Atomic collision resolution
-        Ball.resolveCollision(a, b);
-    }
-}
-        \end{lstlisting}
-        \item The ordering by \texttt{System.identityHashCode()} prevents deadlock but adds computational cost
-        \item If two tasks try to resolve the same collision pair with different order, one will block the other
-    \end{itemize}
     
     \item \textbf{ConcurrentHashMap for lastTouchedBy}:
     \begin{itemize}
@@ -362,12 +359,13 @@ The task-based concurrent implementation differs fundamentally from the thread-p
     \label{fig:image_label_1}
 \end{figure}
 
-The execution follows a structured three-phase pattern within each game loop iteration:
+The execution follows a structured four-phase pattern within each game loop iteration:
  
 \begin{enumerate}
     \item \textbf{Phase 1 (Parallel Ball Physics)}: \texttt{workerPool.parallelBallUpdate()} distributes ball state updates across worker threads
     \item \textbf{Phase 2 (Parallel Collision Detection)}: \texttt{workerPool.parallelCollisionDetection()} distributes pairwise collision checks
-    \item \textbf{Phase 3 (Sequential Player \& Hole Logic)}: \texttt{board.resolvePlayerCollisionsAndHoles()} executes serially on the main GameLoop thread
+    \item \textbf{Phase 3 (Parallel Player Updates)}: \texttt{workerPool.parallelPlayerUpdates()} distributes player state updates
+    \item \textbf{Phase 4 (Sequential Hole Logic)}
 \end{enumerate}
  
 This hybrid approach balances parallelism for expensive operations with simplicity for complex state dependencies.
@@ -405,8 +403,10 @@ while (!board.isGameOver()) {
     workerPool.parallelCollisionDetection(board.getBalls(), 
         board.getLastTouchedBy());
     
-    // Phase 3: Sequential resolution
-    board.resolvePlayerCollisionsAndHoles();
+    // Phase 3: Parallel player updates 
+    workerPool.parallelPlayerCollision();
+                
+    board.checkHolesAndEndGame();
     
     // Render
     viewModel.update(board, fps);
@@ -424,8 +424,8 @@ The \texttt{WorkerPool} encapsulates all ExecutorService framework details from 
     \item \textbf{Internal Structure}:
     \begin{itemize}
         \item \texttt{ExecutorService executor}: Fixed thread pool with size $k = 2 \times \text{availableProcessors}$
-        \item Two public methods: \texttt{parallelBallUpdate()} and \texttt{parallelCollisionDetection()}
-        \item Both use \texttt{invokeAll()} for barrier synchronization
+        \item Three public methods: \texttt{parallelBallUpdate()}, \texttt{parallelCollisionDetection()}, and \texttt{parallelPlayerCollision()}
+        \item All use \texttt{invokeAll()} for barrier synchronization
     \end{itemize}
     \item \textbf{Key Guarantee}: The GameLoop does not import \texttt{java.util.concurrent.*}, maintaining clean separation of concerns
     \item \textbf{Exception Propagation}: Exceptions in tasks are bundled into \texttt{ExecutionException} and re-thrown at \texttt{f.get()}
@@ -493,17 +493,45 @@ for (int i = from; i < to; i++) {
     \end{lstlisting}
     \item \textbf{Fine-Grained Locking}: Each pair's collision resolution is protected by locks on both Ball objects, but independent pairs may execute concurrently.
 \end{itemize}
- 
-\subsubsection*{InputQueue (Asynchronous Communication)}
- 
-A \texttt{BlockingQueue<V2d>} enables the Event Dispatch Thread (EDT) to communicate impulses without blocking the GameLoop:
- 
-\begin{itemize}
-    \item \textbf{Producer}: KeyListener on EDT calls \texttt{gameLoop.notifyInput(v2d)}
-    \item \textbf{Consumer}: GameLoop calls \texttt{inputQueue.poll()} (non-blocking) each frame
-    \item \textbf{Thread-Safety}: BlockingQueue is intrinsically thread-safe; no additional synchronization needed
-\end{itemize}
 
+\subsubsection*{PlayerCollisionTask (Parallel Worker)}
+Implements \texttt{Callable<Void>} to resolve player-ball collisions in parallel:
+\begin{itemize}
+    \item \textbf{Input Parameters}:
+    \begin{itemize}
+        \item \texttt{List<Ball> balls}: Shared reference to all balls
+        \item \texttt{int from, int to}: Range $[from, to)$ of "first" balls in pairs
+        \item \texttt{ConcurrentHashMap<Ball, Integer> lastTouchedBy}: Shared map of ball-to-player touches
+    \end{itemize}
+    \item \textbf{Pair Enumeration}: For each ball $i \in [from, to)$, checks pairs $(i, j)$ where $j \in [i+1, n)$
+    \item \textbf{Synchronization Protocol}:
+    \begin{lstlisting}[language=Java, caption=Ordered Lock Acquisition in PlayerCollisionTask]
+for (int i = from; i < to; i++) {
+            Ball b = balls.get(i);
+
+            // Collisione con player1
+            if (player1 != null) {
+                V2d vPrima = b.getVel();
+                Ball.resolveCollision(player1, b);
+                if (!b.getVel().equals(vPrima)) {
+                    lastTouchedBy.put(b, 1);
+                }
+            }
+
+            // Collisione con player2
+            if (player2 != null) {
+                V2d vPrima = b.getVel();
+                Ball.resolveCollision(player2, b);
+                if (!b.getVel().equals(vPrima)) {
+                    lastTouchedBy.put(b, 2);
+                }
+            }
+        }
+        return null;
+    \end{lstlisting}
+
+\end{itemize}
+ 
 \subsubsection*{Task Decomposition}
 Task decomposition in the Poool implementation follows a \textbf{range-partitioning} strategy:
  
@@ -519,34 +547,6 @@ int chunkSize = Math.max(1, n / nWorkers);
         \item Minimum chunk size of 1 prevents empty tasks
         \item Factor of 2 overprovisioning creates more granularity for load balancing
     \end{itemize}
-    
-    \item \textbf{Ball Update Decomposition}:
-    \begin{lstlisting}[language=Java, caption=Ball Update Task Creation]
-var tasks = new ArrayList<BallUpdateTask>();
-for (int i = 0; i < n; i += chunkSize) {
-    tasks.add(new BallUpdateTask(balls, i, Math.min(i + chunkSize, n), dt, board));
-}
-List<Future<Void>> futures = executor.invokeAll(tasks);
-for (Future<Void> f : futures) f.get();
-    \end{lstlisting}
-    This creates roughly $\lceil n / \text{chunkSize} \rceil$ tasks, which is typically $2k$ tasks for $k$ cores.
-    
-    \item \textbf{Collision Detection Decomposition}:
-    \begin{lstlisting}[language=Java, caption=Collision Task Creation]
-var tasks = new ArrayList<CollisionTask>();
-for (int i = 0; i < n; i += chunkSize) {
-    tasks.add(new CollisionTask(balls, i, Math.min(i + chunkSize, n), lastTouchedBy));
-}
-    \end{lstlisting}
-    Each task is responsible for checking all pairs starting from its range against all other balls.
-    
-    \item \textbf{Load Imbalance in Collision Detection}:
-    \begin{itemize}
-        \item Task $i$ checks $\sum_{idx=i_0}^{i_1} (n - idx - 1)$ pairs
-        \item For the first chunk (indices $0$ to chunkSize): $\approx \text{chunkSize} \times n - \text{chunkSize}^2/2$ pairs
-        \item For the last chunk: $\approx 0$ pairs (no ball after it to check)
-        \item This creates significant load imbalance, with early tasks doing $O(n \times \text{chunkSize})$ work and later tasks doing $O(\text{chunkSize}^2)$
-    \end{itemize}
 \end{itemize}
 
 \subsection{Synchronization Strategy}
@@ -554,7 +554,7 @@ Task-based synchronization employs a layered strategy combining barrier synchron
  
 \subsubsection{Barrier Synchronization via invokeAll()}
  
-Both parallel phases use \texttt{ExecutorService.invokeAll()}, which provides implicit barrier semantics:
+Parallel phases use \texttt{ExecutorService.invokeAll()}, which provides implicit barrier semantics:
  
 \begin{itemize}
     \item \textbf{Behavior}: Blocks until \textit{all} submitted tasks complete
@@ -563,7 +563,8 @@ Both parallel phases use \texttt{ExecutorService.invokeAll()}, which provides im
     \begin{itemize}
         \item Phase 1 completes $\implies$ all ball positions/velocities updated and visible
         \item Phase 2 completes $\implies$ all collision resolutions applied and visible
-        \item Sequential Phase 3 executes with consistent global state
+        \item Phase 3 completes $\implies$ all player updates applied and visible
+        \item Sequential Phase 4 executes with consistent global state
     \end{itemize}
     \item \textbf{Performance Cost}: Tail latency --- the slowest task determines phase duration
 \end{itemize}
@@ -615,6 +616,7 @@ try {
     workerPool.parallelBallUpdate(board.getBalls(), elapsed, board);
     workerPool.parallelCollisionDetection(board.getBalls(), 
         board.getLastTouchedBy());
+    workerPool.parallelPlayerCollision();
 } catch (InterruptedException | ExecutionException e) {
     Thread.currentThread().interrupt();
     break; // Exit game loop gracefully
@@ -642,127 +644,12 @@ This ensures that despite the distributed nature of tasks, the game state remain
 
 The overall game behavior is modeled using a Petri Net capturing the major state transitions:
 
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[node distance=2cm]
-    % Places
-    \node[draw, circle, minimum size=0.8cm] (P0) at (0,0) {$p_0$};
-    \node[draw, circle, minimum size=0.8cm] (P1) at (3,0) {$p_1$};
-    \node[draw, circle, minimum size=0.8cm] (P2) at (6,0) {$p_2$};
-    \node[draw, circle, minimum size=0.8cm] (P3) at (3,-3) {$p_3$};
-    
-    % Transitions
-    \node[draw, rectangle, minimum size=0.8cm] (T1) at (1.5,0) {$t_1$};
-    \node[draw, rectangle, minimum size=0.8cm] (T2) at (4.5,0) {$t_2$};
-    \node[draw, rectangle, minimum size=0.8cm] (T3) at (3,-1.5) {$t_3$};
-    
-    % Arcs
-    \draw[->] (P0) -- (T1);
-    \draw[->] (T1) -- (P1);
-    \draw[->] (P1) -- (T2);
-    \draw[->] (T2) -- (P2);
-    \draw[->] (P1) -- (T3);
-    \draw[->] (T3) -- (P3);
-    \draw[->] (P3) -- (T3);
-    
-    % Labels
-    \node[below=0.3cm of P0] {Idle};
-    \node[below=0.3cm of P1] {Running};
-    \node[below=0.3cm of P2] {Win};
-    \node[below=0.3cm of P3] {GameOver};
-    
-\end{tikzpicture}
-\caption{Game State Petri Net: $p_0$ (Idle) $\xrightarrow{t_1}$ $p_1$ (Running) $\xrightarrow{t_2}$ $p_2$ (Win/End) or $\xrightarrow{t_3}$ $p_3$ (GameOver)}
-\label{fig:petri_game}
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/Petri_net_ass_1.jpeg}
+    \caption{High-Level Game Flow Petri Net}
+    \label{fig:game_flow_petri_net}
 \end{figure}
-
-\begin{itemize}
-    \item $p_0$: Initial idle state
-    \item $t_1$: Game initialization and thread startup
-    \item $p_1$: Game running state with two active threads
-    \item $t_2$: All balls removed or game-over condition detected
-    \item $p_2$: Final winning state
-    \item $p_3$: Player ball in hole (alternative end)
-    \item $t_3$: Continuous looping in game-over state
-\end{itemize}
-
-\subsection{Update Thread Behavior Net}
-
-Detailed behavior of the Update thread cycle:
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[node distance=2.2cm]
-    % Places
-    \node[draw, circle, minimum size=0.8cm] (P1) at (0,0) {$p_1$};
-    \node[draw, circle, minimum size=0.8cm] (P2) at (3,0) {$p_2$};
-    \node[draw, circle, minimum size=0.8cm] (P3) at (6,0) {$p_3$};
-    \node[draw, circle, minimum size=0.8cm] (P4) at (9,0) {$p_4$};
-    
-    % Transitions
-    \node[draw, rectangle] (T1) at (1.5,0) {calc};
-    \node[draw, rectangle] (T2) at (4.5,0) {update};
-    \node[draw, rectangle] (T3) at (7.5,0) {render};
-    \node[draw, rectangle] (T4) at (10.5,0) {loop};
-    
-    % Arcs
-    \draw[->] (P1) -- (T1);
-    \draw[->] (T1) -- (P2);
-    \draw[->] (P2) -- (T2);
-    \draw[->] (T2) -- (P3);
-    \draw[->] (P3) -- (T3);
-    \draw[->] (T3) -- (P4);
-    \draw[->] (P4) -- (T4);
-    \draw[->, bend right=30] (T4) to (P1);
-    
-    % Labels
-    \node[above=0.1cm of P1] {waiting};
-    \node[above=0.1cm of P2] {calc};
-    \node[above=0.1cm of P3] {updating};
-    \node[above=0.1cm of P4] {rendering};
-    
-\end{tikzpicture}
-\caption{Update Thread Loop: Sequential phases of elapsed time calculation, board state update, view model update, and rendering}
-\label{fig:petri_update}
-\end{figure}
-
-\subsection{Bot Thread Behavior Net}
-
-Behavior of the Bot thread with conditional transitions:
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[node distance=2.5cm]
-    % Places
-    \node[draw, circle, minimum size=0.8cm] (P1) at (0,0) {$p_1$};
-    \node[draw, circle, minimum size=0.8cm] (P2) at (4,0) {$p_2$};
-    \node[draw, circle, minimum size=0.8cm] (P3) at (8,0) {$p_3$};
-    
-    % Transitions
-    \node[draw, rectangle] (T1) at (2,0) {wait};
-    \node[draw, rectangle] (T2) at (6,0) {check};
-    \node[draw, rectangle] (T3) at (8,-2) {kick};
-    
-    % Arcs
-    \draw[->] (P1) -- (T1);
-    \draw[->] (T1) -- (P2);
-    \draw[->] (P2) -- (T2);
-    \draw[->] (T2) -- (P3);
-    \draw[->] (P3) -- (T3);
-    \draw[->, bend right=40] (T3) to (P1);
-    \draw[->, bend left=30] (T2) to (P2);
-    
-    % Labels
-    \node[below=0.2cm of T1] {on monitor};
-    \node[below=0.2cm of T2] {if $|v| < 0.05$};
-    \node[below=0.2cm of T3] {random angle};
-    
-\end{tikzpicture}
-\caption{Bot Thread: Waits on monitor, checks velocity, kicks when idle}
-\label{fig:petri_bot}
-\end{figure}
-
-The key guard condition is $|v| < 0.05$, representing the velocity threshold below which the bot is permitted to kick. This threshold prevents the bot from kicking while its ball is already moving at significant speed.
 
 \section{Performance Evaluation}
 
@@ -835,23 +722,6 @@ $$S \approx 1 + \frac{10.1M - 4,500}{4} \approx 2.5\text{-}2.8\times$$
 
 \subsubsection{Task-based Improvements}
 
-
-\subsection{Overhead}
-
-\subsubsection{Multithread overhead}
-
-The monitor-based synchronization introduces overhead:
-
-\begin{itemize}
-    \item \textbf{Lock Contention}: Both Update and Bot threads compete for Board lock
-    \item \textbf{Context Switching}: Multiple threads increase scheduler overhead
-    \item \textbf{Cache Coherency}: Shared data requires cache invalidation
-    \item \textbf{Rendering Synchronization}: RenderSync monitor introduces artificial barriers
-\end{itemize}
-
-The overhead is typically offset by parallelization gains in configurations with significant collision detection workload (400+ balls).
-
-\subsubsection{Task-Based overhead}
 
 \section{Formal Verification with JPF}
 
@@ -1002,19 +872,6 @@ public class MainJPF {
 }
 \end{lstlisting}
 
-\section{Conclusion}
-
-The concurrent implementation of the Poool Game successfully addresses the performance bottlenecks of the sequential version through:
-
-\begin{enumerate}
-    \item \textbf{Multi-threaded Architecture}: Separates physics computation, bot AI, and rendering into independent threads
-    \item \textbf{Monitor-Based Synchronization}: Provides clean abstraction for thread coordination
-    \item \textbf{Lock-Free Rendering}: RenderSync monitor prevents view corruption without blocking updates
-    \item \textbf{Formal Verification}: JPF proves correctness properties (deadlock-freedom, race-freedom) for minimal configurations
-\end{enumerate}
-
-\section*{References}
-
 \begin{thebibliography}{99}
 
 \bibitem{jpf} NASA Formal Methods Program, \textit{Java Path Finder - Model Checker for Java Programs}, \url{https://javapathfinder.github.io/}
@@ -1026,34 +883,5 @@ The concurrent implementation of the Poool Game successfully addresses the perfo
 \bibitem{java-concurrency} B. Goetz et al., \textit{Java Concurrency in Practice}, Addison-Wesley, 2006.
 
 \end{thebibliography}
-
-\appendix
-
-\section{Code Listings}
-
-\subsection{GameController Main Loop}
-
-\begin{lstlisting}[language=Java, caption=Update Loop Implementation]
-private void updateLoop() {
-    long lastUpdateTime = System.currentTimeMillis();
-    int nFrames = 0;
-    long t0 = System.currentTimeMillis();
-
-    while (isRunning()) {
-        long elapsed = System.currentTimeMillis() - lastUpdateTime;
-        lastUpdateTime = System.currentTimeMillis();
-        
-        board.updateState(elapsed);
-        
-        nFrames++;
-        viewModel.update(board, framePerSec);
-        view.render();
-
-        if (board.isGameOver()) {
-            setRunning(false);
-        }
-    }
-}
-\end{lstlisting}
 
 \end{document}
