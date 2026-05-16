@@ -13,6 +13,7 @@ import javax.swing.SwingUtilities;
 
 public class Main {
 	public static void main(String[] argv) {
+ 
         // Model
         var board = new Board();
         board.init(new LargeBoardConf());
@@ -26,11 +27,12 @@ public class Main {
             view.render();
  
             // Controller
+            int nWorkers        = Runtime.getRuntime().availableProcessors();
             var inputHandler    = new InputHandler(board);
-            var gameController  = new GameController(board, viewModel, view);
+            var gameController  = new GameController(board, viewModel, view, nWorkers);
  
             inputHandler.attach(view);
             gameController.startGame();
         });
-	}
+    }
 }

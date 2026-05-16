@@ -45,7 +45,11 @@ public class BotController {
  
     public void stop() {
         running = false;
-        signal(); // sveglia il thread se è bloccato in wait
+        // Sveglia incondizionatamente: signal() notifica solo se isPlayer2Still(),
+        // ma il bot potrebbe essere in wait() con la palla in movimento.
+        synchronized (botMonitor) {
+            botMonitor.notifyAll();
+        }
     }
  
     /**
