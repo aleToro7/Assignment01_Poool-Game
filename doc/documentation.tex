@@ -346,12 +346,15 @@ The game execution follows this sequence:
 \end{enumerate}
 
 \subsection{Architectural Overview for Task-Based Approach}
-The task-based concurrent implementation differs fundamentally from the thread-per-entity
- model. Rather than creating persistent threads for each game component, 
- this approach uses the \textbf{Executor Framework} with a fixed-size thread pool to parallelize computation-heavy 
- phases of the game loop. The \texttt{GameLoop} acts as a master coordinator, delegating parallelizable tasks to a \texttt{WorkerPool} abstraction 
- that encapsulates all ExecutorService details.
-
+The task-based concurrent implementation differs fundamentally 
+from the thread-per-entity model. Rather than creating persistent 
+threads for each game component, this approach uses the \textbf{Executor Framework}
+ with a fixed-size thread pool to parallelize computation-heavy phases of the game loop. 
+ We used \textbf{Map-Reduce} algorithms, the architecture implements a Master/Worker 
+ pattern where the \texttt{GameLoop} acts as the master coordinator. 
+ It delegates tasks to a \texttt{WorkerPool} abstraction which, knowing the data space
+  topology in advance, splits the workload into smaller, independent chunks (\textit{map phase}). 
+  These chunks are then efficiently computed in parallel by the underlying \texttt{ExecutorService}.
 \begin{figure}[h!]
     \centering
     \includegraphics[width=1.1\textwidth]{images/task-based-architecture.png}
