@@ -354,21 +354,11 @@ The task-based concurrent implementation differs fundamentally from the thread-p
 
 \begin{figure}[h!]
     \centering
-    \includegraphics[width=0.3\textwidth]{images/task-based-architecture.png}
-    \caption{A descriptive caption for your image.}
+    \includegraphics[width=1.1\textwidth]{images/task-based-architecture.png}
+    \caption{UML class diagram}
     \label{fig:image_label_1}
 \end{figure}
 
-The execution follows a structured four-phase pattern within each game loop iteration:
- 
-\begin{enumerate}
-    \item \textbf{Phase 1 (Parallel Ball Physics)}: \texttt{workerPool.parallelBallUpdate()} distributes ball state updates across worker threads
-    \item \textbf{Phase 2 (Parallel Collision Detection)}: \texttt{workerPool.parallelCollisionDetection()} distributes pairwise collision checks
-    \item \textbf{Phase 3 (Parallel Player Updates)}: \texttt{workerPool.parallelPlayerUpdates()} distributes player state updates
-    \item \textbf{Phase 4 (Sequential Hole Logic)}
-\end{enumerate}
- 
-This hybrid approach balances parallelism for expensive operations with simplicity for complex state dependencies.
 \subsubsection{Component Descriptions}
 The task-based architecture consists of the following key components:
  
@@ -574,7 +564,7 @@ Parallel phases use \texttt{ExecutorService.invokeAll()}, which provides implici
 CollisionTask uses nested synchronized blocks to prevent data races during collision resolution:
  
 \begin{itemize}
-    \item \textbf{Why Two Locks}: Each \texttt{Ball.resolveCollision(a, b)} modifies both Ball objects' velocity and position. Without synchronization, a concurrent update might corrupt the ball state.
+    \item \textbf{Two Locks}: Each \texttt{Ball.resolveCollision(a, b)} modifies both Ball objects' velocity and position. Without synchronization, a concurrent update might corrupt the ball state.
     \item \textbf{Deadlock Prevention via Ordering}:
     \begin{itemize}
         \item All code acquires locks in a consistent order: always lock Ball A before Ball B if identityHashCode(A) $\leq$ identityHashCode(B)
@@ -640,7 +630,7 @@ This ensures that despite the distributed nature of tasks, the game state remain
  
 
 \section{Behavior Specification: Petri Nets}
-\subsection{High-Level Game Flow Net}
+\subsection{High-Level Game Flow Net Task-based}
 The system can be broken down into actions called “tasks”; agents are responsible 
 for carrying them out. The computations required to complete each 
 individual task can occur in parallel; however, there are temporal
