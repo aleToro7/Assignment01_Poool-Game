@@ -641,8 +641,35 @@ This ensures that despite the distributed nature of tasks, the game state remain
 
 \section{Behavior Specification: Petri Nets}
 \subsection{High-Level Game Flow Net}
+The system can be broken down into actions called “tasks”; agents are responsible 
+for carrying them out. The computations required to complete each 
+individual task can occur in parallel; however, there are temporal
+ dependencies within the system. The sequential nature of the problem is 
+ fundamentally due to the data dependencies between tasks: if a variable 
+ must be read in order to complete a task, then it must be ensured that this 
+ variable does not change during the read operation, so as not to lose information.
 
-The overall game behavior is modeled using a Petri Net capturing the major state transitions:
+\vspace{1.5em}
+
+\begin{tabular}{ |p{5cm}|p{5cm}|p{5cm}|  }
+\hline
+Tasks & Temporal Dependencies & Data Dependencies \\
+\hline
+Ball Update & Must complete BEFORE Collision Detection & Reads: position, velocity, bounds, elapsed time. Writes: updated position, velocity \\
+\hline
+Collision Update & Starts AFTER Ball Update barrier; Completes BEFORE Player Collision barrier   & Reads: position, velocity, radius, mass (all balls), lastTouchedBy. Writes: velocity, position, lastTouchedBy \\
+\hline
+Player Collision & Starts AFTER Collision Detection barrier; Completes BEFORE Rendering & Reads: position, velocity, player positions, bounds, lastTouchedBy, scores. Writes: velocity, position, lastTouchedBy, scores, balls list, isGameOver, winnerMessage \\
+\hline
+Simulation Rendering    & Starts AFTER Player Collision; Completes BEFORE next frame input poll & Reads: balls list, player positions, scores, isGameOver, winnerMessage, framePerSec. Writes: ViewModel state, GUI rendering \\
+\hline
+\end{tabular}
+
+\vspace{1.5em}
+
+By following the table, it is possible to represent the basic behavior of the system using
+a generic Petri net, which is ideally suited for representing the temporal dependencies
+of individual tasks.
 
 \begin{figure}[h!]
     \centering
@@ -650,6 +677,10 @@ The overall game behavior is modeled using a Petri Net capturing the major state
     \caption{High-Level Game Flow Petri Net}
     \label{fig:game_flow_petri_net}
 \end{figure}
+
+
+
+
 
 \section{Performance Evaluation}
 
