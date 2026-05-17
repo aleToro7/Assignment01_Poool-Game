@@ -13,9 +13,6 @@ import java.util.Random;
  *  - stop()   → segnala terminazione e sveglia il thread se in wait
  *  - signal() → chiamato dall'updateLoop ogni tick per svegliare il bot
  *               se la pallina è ferma
- *
- * Il botMonitor vive qui: è un meccanismo di coordinamento tra thread,
- * non stato di dominio del gioco.
  */
 public class BotController {
  
@@ -45,17 +42,12 @@ public class BotController {
  
     public void stop() {
         running = false;
-        // Sveglia incondizionatamente: signal() notifica solo se isPlayer2Still(),
-        // ma il bot potrebbe essere in wait() con la palla in movimento.
+        
         synchronized (botMonitor) {
             botMonitor.notifyAll();
         }
     }
  
-    /**
-     * Chiamato dall'updateLoop ad ogni tick.
-     * Sveglia il botLoop solo se player2 è fermo, evitando notifiche inutili.
-     */
     public void signal() {
         if (board.isPlayer2Still()) {
             synchronized (botMonitor) {

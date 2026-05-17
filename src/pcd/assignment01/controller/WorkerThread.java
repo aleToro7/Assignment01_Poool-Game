@@ -7,7 +7,6 @@ import pcd.assignment01.util.CyclicBarrier;
 import java.util.List;
 
 /**
- * WorkerThread è un thread persistente (non viene mai ricreato).
  * Ad ogni tick esegue due fasi sulla propria partizione di palline:
  *
  *   Fase 1 — aggiorna le posizioni (updateState su ogni pallina)
@@ -46,14 +45,6 @@ public class WorkerThread extends Thread {
         this.barrierCollisions   = barrierCollisions;
     }
 
-    // -------------------------------------------------------------------------
-    // API chiamata dal GameController ogni tick
-    // -------------------------------------------------------------------------
-
-    /**
-     * Imposta partizione e dt per il prossimo tick, poi sveglia il worker.
-     * Chiamata dall'updateLoop del GameController prima di aspettare le barrier.
-     */
     public void startTick(List<Ball> partition, List<Ball> allBalls, int partitionStart, long dt) {
         synchronized (tickMonitor) {
             this.partition      = partition;
@@ -92,13 +83,7 @@ public class WorkerThread extends Thread {
                 tickReady = false;
             }
 
-            // NON usciamo qui anche se running==false:
-            // se abbiamo ricevuto un tick (tickReady era true) dobbiamo
-            // completare entrambe le barrier, altrimenti il GameController
-            // resta bloccato in await() per sempre.
-            // L'uscita avviene solo al prossimo giro del while(running).
-
-            // ---- FASE 1: aggiorna posizioni ----
+            // FASE 1: aggiorna posizioni
             // Sicuro senza lock: le partizioni sono disgiunte, ogni worker
             // scrive solo sulle sue Ball e non legge quelle degli altri.
             for (var b : partition) {
@@ -111,7 +96,7 @@ public class WorkerThread extends Thread {
                 return;
             }
 
-            // ---- FASE 2: collisioni ball-ball ----
+            // FASE 2: collisioni ball-ball
             // Ogni coppia (a, b) viene processata UNA SOLA VOLTA:
             // solo dal worker la cui partizione contiene 'a' con indice < indice di 'b'.
             // L'indice nella lista condivisa allBalls è l'ordine canonico:

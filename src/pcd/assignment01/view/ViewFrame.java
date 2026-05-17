@@ -128,6 +128,11 @@ public class ViewFrame extends JFrame {
 				g2.drawString(msg, msgX, msgY);
 			}
 
+			// FPS counter
+			g2.setFont(new Font("Arial", Font.BOLD, 14));
+			g2.setColor(Color.DARK_GRAY);
+			g2.drawString("FPS: " + model.getFramePerSec(), 10, 20);
+
 			sync.notifyFrameRendered();
 		}
 

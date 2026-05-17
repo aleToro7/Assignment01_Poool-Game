@@ -27,14 +27,6 @@ public class ViewModel {
         winnerMessage = "";
     }
 
-    /**
-     * Aggiornamento chiamato ad ogni tick dall'updateLoop.
-     * Copia lo stato fisico del Board nello snapshot della view.
-     *
-     * NON legge più winnerMessage da Board: quella stringa non esiste più
-     * nel model. Il messaggio di fine partita viene impostato dal controller
-     * tramite setGameOverMessage(), chiamato una sola volta a game over.
-     */
     public synchronized void update(Board board, int framePerSec) {
         balls.clear();
         for (var b : board.getBalls()) {
@@ -52,21 +44,12 @@ public class ViewModel {
         this.score1     = board.getScore1();
         this.score2     = board.getScore2();
         this.isGameOver = board.isGameOver();
-        // winnerMessage NON viene toccato qui
     }
 
-    /**
-     * Chiamato da GameController.handleGameOver() una sola volta a fine partita.
-     * La stringa è già formattata dal controller (non dal model).
-     */
     public synchronized void setGameOverMessage(String message) {
         this.winnerMessage = message;
         this.isGameOver    = true;
     }
-
-    // -------------------------------------------------------------------------
-    // Getters (tutti synchronized: letti dal thread Swing, scritti dall'updateLoop)
-    // -------------------------------------------------------------------------
 
     public synchronized ArrayList<BallViewInfo> getBalls() {
         return new ArrayList<>(balls);

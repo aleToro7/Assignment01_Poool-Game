@@ -14,11 +14,11 @@ import java.util.List;
  * GameController gestisce il game loop principale.
  *
  * Multithreading:
- *  - N WorkerThread persistenti (configurabili) lavorano in parallelo ogni tick
+ *  - N WorkerThread persistenti lavorano in parallelo ogni tick
  *  - Due CyclicBarrier sincronizzano le fasi: posizioni → collisioni
  *  - Il GameController partecipa alle barrier come N+1-esimo "party"
  *    così può eseguire le operazioni sequenziali (player collisions, checkHoles)
- *    subito dopo la fase 2 senza ulteriore sincronizzazione
+ *    subito dopo la fase 2 senza ulteriore sincronizzazione (non vantaggiosa)
  *
  * Flusso per tick:
  *   1. GameController divide balls in N partizioni
@@ -30,8 +30,8 @@ import java.util.List;
  */
 public class GameController {
 
-    private static final int  TARGET_FPS = 60;
-    private static final long FRAME_MS   = 1000 / TARGET_FPS;
+    //private static final int  TARGET_FPS = 60;
+    //private static final long FRAME_MS   = 1000 / TARGET_FPS;
 
     private final Board         board;
     private final ViewModel     viewModel;
@@ -47,13 +47,10 @@ public class GameController {
     private volatile boolean running = false;
     private Thread updateThread;
 
-    // Cache partizioni: ricalcolate solo quando cambia il numero di palline (fix 7)
     private List<Ball>       cachedBalls;
     private List<List<Ball>> cachedPartitions;
 
-    /**
-     * @param nWorkers numero di WorkerThread — tipicamente availableProcessors()
-     */
+
     public GameController(Board board, ViewModel viewModel, View view, int nWorkers) {
         this.board         = board;
         this.viewModel     = viewModel;
@@ -61,7 +58,7 @@ public class GameController {
         this.botController = new BotController(board);
         this.nWorkers      = nWorkers;
 
-        // +1 perché anche il GameController partecipa alle barrier
+        // parties = nWorkers (worker) + 1 (GameController che partecipa alle barrier)
         this.barrierPositions  = new CyclicBarrier(nWorkers + 1);
         this.barrierCollisions = new CyclicBarrier(nWorkers + 1);
 
@@ -113,10 +110,6 @@ public class GameController {
                 doParallelUpdate(elapsed);
             }
 
-            // Fix 4: controlla game over subito dopo la fisica, prima del render.
-            // checkHolesAndGameOver() può aver settato isGameOver=true in questo tick:
-            // in quel caso handleGameOver() setta il messaggio e poi renderizziamo
-            // una sola volta con lo stato finale corretto.
             if (board.isGameOver()) {
                 handleGameOver();
                 break;
@@ -131,14 +124,14 @@ public class GameController {
             viewModel.update(board, fps);
             view.render();
 
-            long sleepMs = FRAME_MS - (System.currentTimeMillis() - now);
+            /*long sleepMs = FRAME_MS - (System.currentTimeMillis() - now);
             if (sleepMs > 0) {
                 try { Thread.sleep(sleepMs); }
                 catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
                 }
-            }
+            }*/
         }
         running = false;
     }
@@ -148,23 +141,16 @@ public class GameController {
     // -------------------------------------------------------------------------
 
     private void doParallelUpdate(long dt) {
-        // Fix 3: snapshot atomico della lista palline PRIMA di qualsiasi operazione
-        // parallela. getBalls() è synchronized su Board → nessuna race con checkHoles().
-        // La lista snapshot è immutabile durante tutto il tick: i worker la leggono
-        // in sola lettura per le collisioni cross-boundary.
         List<Ball> balls = board.getBalls();
 
-        // Aggiorna player1 e player2 (sequenziale, solo 2 oggetti)
         board.updatePlayers(dt);
 
-        // Fix 7: ricalcola le partizioni solo se il numero di palline è cambiato
-        // (succede quando una pallina entra in buca). Evita riallocazione ogni tick.
+        // Ricalcola le partizioni solo se il numero di palline è cambiato (succede quando una pallina entra in buca).
         if (cachedBalls == null || cachedBalls.size() != balls.size()) {
             cachedPartitions = partition(balls, nWorkers);
             cachedBalls      = balls;
         } else {
             // Aggiorna i riferimenti alle Ball (la lista è nuova ad ogni getBalls())
-            // mantenendo la stessa struttura di partizione
             cachedBalls = balls;
             int idx = 0;
             for (List<Ball> part : cachedPartitions) {
@@ -191,7 +177,6 @@ public class GameController {
         try { barrierPositions.await(); }
         catch (InterruptedException e) {
             // Se il GC viene interrotto, i worker sono già in await() sulla stessa barrier.
-            // Dobbiamo svegliarli prima di uscire, altrimenti restano bloccati per sempre.
             workers.forEach(WorkerThread::stopWorker);
             Thread.currentThread().interrupt();
             return;
@@ -205,10 +190,7 @@ public class GameController {
             return;
         }
 
-        // Fase 3 sequenziale: collisioni player vs palline e player vs player
         board.resolvePlayerCollisions();
-
-        // Fase 4 sequenziale: checkHoles + game over
         board.checkHolesAndGameOver();
     }
 
@@ -217,8 +199,6 @@ public class GameController {
     // -------------------------------------------------------------------------
 
     private static <T> List<List<T>> partition(List<T> list, int n) {
-        // Con poche palline (es. MinimalBoardConf) n potrebbe superare list.size():
-        // limitiamo per evitare partizioni vuote che non aggiungono parallelismo.
         n = Math.min(n, Math.max(1, list.size()));
 
         List<List<T>> result = new ArrayList<>(n);

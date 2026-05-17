@@ -27,7 +27,7 @@ public class Main {
             view.render();
  
             // Controller
-            int nWorkers        = Runtime.getRuntime().availableProcessors();
+            int nWorkers        = Runtime.getRuntime().availableProcessors() +  1;
             var inputHandler    = new InputHandler(board);
             var gameController  = new GameController(board, viewModel, view, nWorkers);
  

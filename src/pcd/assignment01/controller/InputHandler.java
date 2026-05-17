@@ -7,17 +7,7 @@ import pcd.assignment01.view.View;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 
-/**
- * InputHandler gestisce l'input da tastiera del giocatore umano (player1).
- *
- * Responsabilità:
- *  - registrarsi sulla View come KeyListener
- *  - tradurre i tasti freccia in impulsi V2d
- *  - delegare il kick a Board (unico punto di accesso allo stato di gioco)
- *
- * Vive nel package controller: trasforma input utente in comandi sul model,
- * senza toccare la View oltre alla registrazione iniziale.
- */
+
 public class InputHandler {
 
     private static final double KICK_SPEED = 1.5;
