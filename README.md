@@ -55,8 +55,27 @@ The `assignment-01`folder in the repo includes two sketches that could be used a
 
 The deliverable must be a zipped folder `Assignment-01`, to be submitted on the course web site, including:  
 - `src` directory with sources
-- `doc` directory with the report in PDF (`report.pdf`). 
+- `doc` directory with the report in PDF (`report.pdf`).
 
 
+### Suddivisione e organizzazione dei Thread
+
+Suddivisione in componenti indipendenti:
+- Thread principale (Main Loop): Gestisce il ciclo infinito, coordina gli altri thread e aggiorna la vista (view.render()). Monitora condizioni di fine gioco.
+- Thread per fisica (Physics Updater): Esegue board.updateState(dt) in un loop separato, aggiornando posizioni, collisioni e controlli buche. Usa un timer per eseguire aggiornamenti a intervalli fissi (es. 60 FPS).
+- Thread per input giocatore umano: Gestisce l'ascolto dei tasti (già con KeyAdapter), applicando impulsi a player1. Può essere un thread dedicato per reattività.
+- Thread per bot (Player 2): In un loop, controlla periodicamente se muovere player2 (es. ogni 2 secondi), calcolando direzione casuale e applicando impulso.
+- Thread per rendering: Aggiorna viewModel e chiama view.render() in parallelo, per evitare blocchi del loop principale.
+
+### Suddivisione e organizzazione dei Task
+
+Suddivisione Task per modularità:
+- Task per aggiornamento posizioni: Aggiorna posizioni di tutte le palline (player1, player2, balls) usando updateState(dt, this) su ciascuna.
+- Task per collisioni tra palline piccole: Scansiona coppie di balls e risolve collisioni con Ball.resolveCollision, azzerando lastTouchedBy.
+- Task per collisioni player-palline: Per ogni ball, risolve collisioni con player1 e player2, aggiornando lastTouchedBy.
+- Task per collisione player-player: Risolve collisione tra player1 e player2 se entrambi presenti.
+- Task per controlli buche: Esegue checkHoles() per rimuovere palline in buca e aggiornare punteggi/vincitore.
+- Task per input/bot: Gestisce impulsi da tastiera (asincrono) e movimenti bot periodici.
+- Task per rendering: Aggiorna viewModel e renderizza vista.
 
 
