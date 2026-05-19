@@ -10,7 +10,7 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{tikz}
-\usetikzlibrary{shapes,arrows,positioning}
+\usetikzlibrary{positioning, shapes.multipart, arrows.meta, fit, backgrounds}
 \usepackage{multirow}
 \usepackage{array}
 \usepackage{hyperref}
@@ -216,134 +216,229 @@ Task-based parallelism requires careful synchronization to ensure memory consist
 
 \subsection{Architectural Overview for Multithreading}
 
-The concurrent Poool implementation adopts an \textbf{MVC (Model-View-Controller)} architectural pattern with multiple active components:
+The project is structured following the \textbf{Model-View-Controller (MVC)} pattern,
+with a strict separation of responsibilities across three packages:
+\texttt{pcd.assignment01.model}, \texttt{pcd.assignment01.view}, and
+\texttt{pcd.assignment01.controller}.
+ 
+ \begin{itemize}
+        \item \textbf{Model}: The model package contains all domain state and physics logic, with no knowledge of rendering or threading policy. The central class is \texttt{Board}, which owns the list of \texttt{Ball} objects, the two player balls, the board boundaries, the scores, and the game-over flag.\\
+\texttt{updatePlayers()}, \texttt{resolveBallCollision()}, \texttt{resolvePlayerCollisions()}, and \\
+\texttt{checkHolesAndGameOver()} are the only methods through which the controller modifies the model state.
+	
+	\item \textbf{View}: The view package contains \texttt{View}, \texttt{ViewFrame}, and \texttt{ViewModel}. The view never reads directly from \texttt{Board}: it reads exclusively from \texttt{ViewModel}, a thread-safe snapshot object whose fields are updated by the controller once per tick via \texttt{update(Board, int)}. This decoupling ensures that the Swing Event Dispatch Thread (EDT) always paints a consistent, fully-populated snapshot without ever competing with the physics threads for \texttt{Board}'s intrinsic lock.
+ 
+\texttt{ViewModel} stores \texttt{BallViewInfo} records (position and radius) for all small balls and for each player, the current scores, the FPS counter, and the game-over message. The game-over message is written only once, through \texttt{setGameOverMessage(String)}, called by the controller at the end of the game; it is never written during normal tick updates, avoiding a race betweenphysics threads and the EDT.
+ 
+\texttt{RenderSynch} provides a generation counter that lets the update thread block until the EDT has completed the current repaint, preventing frame tearing without busy-waiting.
 
+	\item \textbf{Controller}: The controller package contains \texttt{GameController}, \texttt{BotController},
+\texttt{InputHandler}, and \texttt{WorkerThread}.
+ 
+\texttt{GameController} is the orchestrator: it owns the update loop thread, the worker pool, both \texttt{CyclicBarrier} instances, and the \texttt{BotController}. It is the only component that calls physics methods on \texttt{Board} in the correct sequential order after the parallel phases have completed.
+ 
+\texttt{BotController} encapsulates the autonomous player (player~2) logic in its own thread, waiting on a private monitor until the game physics signal that the ball is still enough to act.
+ 
+\texttt{InputHandler} translates keyboard events from the EDT into \texttt{board.kickPlayer1()} calls, with an early-exit guard on \texttt{isGameOver()}. It is registered on the \texttt{View} inside \texttt{SwingUtilities.invokeLater}, ensuring registration happens on the EDT.
+ \end{itemize}
+ 
 \begin{figure}[h!]
     \centering
-    \includegraphics[width=0.8\textwidth]{images/Thread-model-architecture.png}
-    \caption{A descriptive caption for your image.}
-    \label{fig:image_label}
+    \includegraphics[width=0.8\textwidth]{images/UML_MultiThread.png}
+    \caption{High-Level Game Flow Petri Net}
+    \label{fig:game_flow_petri_net}
 \end{figure}
-
-\subsubsection{Component Description}
-
-\subsubsection*{Model Layer}
-The Model layer encapsulates the game state and physics engine:
-
-\begin{itemize}
-    \item \textbf{Board}: Central synchronized object maintaining:
-    \begin{itemize}
-        \item List of balls with positions and velocities
-        \item Player ball states (human and bot)
-        \item Scores for both players
-        \item Game-over state
-        \item Ball-to-player touch tracking
-    \end{itemize}
-    \item \textbf{Ball}: Represents physical entities with mass, radius, position, and velocity
-    \item \textbf{Boundary}: Defines board limits for collision detection
-    \item \textbf{Monitor (Board)}: Synchronized access ensures atomic game state updates
-\end{itemize}
-
-\subsubsection*{Controller Layer}
-The Controller comprises two main active components:
-
-\begin{itemize}
-    \item \textbf{Update Thread}: Maintains the main game loop
-    \begin{itemize}
-        \item Periodically updates board physics (elapsed time-based)
-        \item Synchronizes with View for rendering
-        \item Maintains frame rate statistics
-        \item Checks game-over conditions
-    \end{itemize}
-    \item \textbf{Bot Thread}: Autonomous player agent
-    \begin{itemize}
-        \item Monitors bot ball velocity
-        \item Generates random kick actions when ball is idle ($v < 0.05$)
-        \item Waits on bot monitor for notifications
-        \item Respects game-over state
-    \end{itemize}
-\end{itemize}
-
-\subsubsection*{View Layer}
-\begin{itemize}
-    \item \textbf{ViewFrame}: Swing JFrame managing GUI rendering
-    \item \textbf{ViewModel}: Passive data holder with synchronized access
-    \item \textbf{RenderSync}: Monitor pattern implementation for synchronous rendering
-    \item \textbf{Keyboard Input Handler}: Asynchronously captures user input
-\end{itemize}
-
-\subsection{Synchronization Strategy}
-
-\subsubsection{Monitor-Based Synchronization}
-The implementation uses Java monitors (synchronized blocks/methods) rather than low-level primitives:
-
-\begin{lstlisting}[language=Java, caption=Board Synchronized Methods]
-public synchronized void updateState(long dt) {
-    // Atomic physics computation
-    for (Ball b : balls) {
-        b.updateState(dt, this);
-    }
-    // Atomic collision detection
-    for (int i = 0; i < balls.size(); i++) {
-        for (int j = i + 1; j < balls.size(); j++) {
-            Ball.resolveCollision(balls.get(i), balls.get(j));
-        }
-    }
-}
-\end{lstlisting}
-
-\subsubsection{Bot Monitor}
-A dedicated monitor controls bot behavior synchronization:
-
-\begin{lstlisting}[language=Java, caption=Bot Thread Synchronization]
-synchronized (board.getBotMonitor()) {
-    while (isRunning()) {
-        var p2 = board.getPlayer2();
-        if (p2.getVel().abs() < 0.05) {
-            // Generate kick action
-        } else {
-            try {
-                board.getBotMonitor().wait();
-            } catch (InterruptedException e) {
-                // Handle interruption
-            }
-        }
-    }
-}
-\end{lstlisting}
-
-\subsubsection{Rendering Synchronization (RenderSync)}
-Custom monitor ensures rendering completion before continuing state updates:
-
-\begin{lstlisting}[language=Java, caption=RenderSync Implementation]
-public void render() {
-    long nf = sync.nextFrameToRender();
-    panel.repaint();
-    if (!SwingUtilities.isEventDispatchThread()) {
-        try {
-            sync.waitForFrameRendered(nf);
-        } catch (InterruptedException ex) {
-            ex.printStackTrace();
-        }
-    }
-}
-\end{lstlisting}
-
-\subsection{Thread Lifecycle}
-
-The game execution follows this sequence:
-
+ 
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection{Thread Model}
+% ─────────────────────────────────────────────────────────────────────────────
+ 
+The application runs five categories of threads simultaneously during a game:
+ 
 \begin{enumerate}
-    \item \textbf{Initialization}: Board configured with balls, boundaries, players
-    \item \textbf{Thread Creation}: Update and Bot threads spawned as daemon threads
-    \item \textbf{Game Execution}: 
-    \begin{itemize}
-        \item Update thread cycles main game loop
-        \item Bot thread waits on monitor, activates on velocity threshold
-        \item Both threads access shared Board state via synchronization
-    \end{itemize}
-    \item \textbf{Termination}: Game-over flag set, threads interrupted and stopped
+    \item \textbf{Main thread}: bootstraps the model and schedules the Swing
+          initialization on the EDT via \texttt{SwingUtilities.invokeLater}.
+          It exits immediately after.
+ 
+    \item \textbf{Event Dispatch Thread (EDT)}: the standard Swing thread.
+          It handles key events (forwarded by \texttt{InputHandler}) and executes
+          repaints triggered by \texttt{panel.repaint()}. It never touches
+          \texttt{Board} directly: key events call \texttt{board.kickPlayer1()},
+          which is \texttt{synchronized}, and repaints read only from
+          \texttt{ViewModel}.
+ 
+    \item \textbf{UpdateThread}: a single daemon thread owned by
+          \texttt{GameController}. It drives the game loop: it advances the
+          physics pipeline each tick, signals \texttt{BotController}, copies
+          state into \texttt{ViewModel}, and calls \texttt{view.render()}.
+          It also participates in both \texttt{CyclicBarrier}s as the
+          $(N+1)$-th party, allowing it to perform the sequential post-barrier
+          phases without additional synchronization.
+ 
+    \item \textbf{WorkerThread-0 \ldots WorkerThread-N}: a pool of
+          $N = \texttt{availableProcessors()} + 1$ persistent daemon threads,
+          created once at startup and never recreated. Each worker waits on its
+          private \texttt{tickMonitor} until \texttt{GameController} calls
+          \texttt{startTick()}, then executes phase~1 (positions) and phase~2
+          (ball-ball collisions) before waiting again for the next tick.
+ 
+    \item \textbf{BotThread}: a single daemon thread owned by
+          \texttt{BotController}. It waits on a private \texttt{botMonitor}
+          until \texttt{GameController} signals that player~2 is still, then
+          applies a random kick impulse subject to a 2-second cooldown.
 \end{enumerate}
+
+All threads except the main thread are daemon threads, so the JVM exits cleanly
+when the window is closed.
+ 
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection{Parallel Physics Pipeline}
+% ─────────────────────────────────────────────────────────────────────────────
+ 
+The physics update for each game tick is divided into five phases, two of which
+execute in parallel across the worker pool.
+ \begin{enumerate}
+	\item \textbf{Player update (sequential)}: Before the parallel work begins, \texttt{GameController} calls \texttt{board.updatePlayers(dt)}, which advances the positions of the two heavy player balls. This is sequential because (a) there are only two such balls, and (b) the workers' collision phase reads player state indirectly via \texttt{resolvePlayerCollisions()}, which runs after the barriers. Keeping player updates sequential avoids any contention.
+
+	\item \textbf{Position update (parallel)}: The list of small balls is divided into $N$ contiguous, disjoint partitions using a balanced split (each partition differs in size by at most one element). Each \texttt{WorkerThread} receives its partition and calls \texttt{ball.updateState(dt)} on every ball it owns. Because the partitions are disjoint, no two workers write to the same \texttt{Ball} object during this phase, and no locking is required.
+
+After finishing, each worker calls \texttt{barrierPositions.await()}. The \texttt{UpdateThread} also calls \texttt{barrierPositions.await()} as the $(N+1)$-th party. The barrier scatters all threads into phase~2 only once every worker (and the controller) has finished phase~1, guaranteeing that all positions are fully updated before any collision is resolved.
+
+	\item \textbf{Ball-ball collision resolution (parallel)}: Each worker resolves collisions between its own balls and all balls with a higher index in the global \texttt{allBalls} list. Formally, worker $i$ owns balls with indices $[\mathit{start}_i, \mathit{start}_i + |\mathit{partition}_i|)$ and processes pairs $(a, b)$ where $\mathit{idx}(a) < \mathit{idx}(b)$. This scheme ensures that each pair is processed exactly once across all workers, eliminating the $O(n^2)$ duplication that would arise from a naive per-worker full scan.
+ 
+Concurrent access to the same \texttt{Ball} object by different workers is possible at partition boundaries. To prevent data races, each worker acquires two \texttt{synchronized} locks — one on each ball — before calling \texttt{board.resolveBallCollision()}. The locks are always acquired in index order (lower index first), which is the canonical lock-ordering protocol that eliminates the possibility of deadlock: no cycle can form in the lock-dependency graph because the ordering is strict and total.
+ 
+The index-based ordering also replaces the earlier use of \texttt{System.identityHashCode()} as the canonical key, which was unsafe because two distinct objects can share the same identity hash code, breaking the strict total order required for deadlock freedom.
+ 
+After finishing, each worker calls \texttt{barrierCollisions.await()}, and the\\
+\texttt{UpdateThread} does the same. The barrier guarantees that all ball-ball collisions are fully resolved before the sequential phases begin.
+
+	\item \textbf{Player collision resolution (sequential)}: \texttt{GameController} calls\\ 
+\texttt{board.resolvePlayerCollisions()}, which is \texttt{synchronized} on \texttt{Board}. This method resolves collisions between each player and every small ball, and between the two players themselves. It also updates the \texttt{lastTouchedBy} map, which records the last player to touch each small ball and is used for scoring. This phase is sequential because both player objects are shared across all potential pairs, making fine-grained locking impractical.
+
+	\item \textbf{Hole detection and game-over (sequential)}: \texttt{GameController} calls\\
+\texttt{board.checkHolesAndGameOver()}, which is also \texttt{synchronized} on \texttt{Board}. It checks whether any ball or player has entered a hole, removes sunk balls from the list, increments scores using \texttt{lastTouchedBy}, and sets \texttt{isGameOver} if appropriate. This phase is sequential because it mutates the shared \texttt{balls} list and the scoring state atomically.
+ \end{enumerate}
+ 
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection{Synchronization Mechanisms}
+% ─────────────────────────────────────────────────────────────────────────────
+ 
+\begin{itemize}
+	\item \textbf{CyclicBarrier}: The \texttt{CyclicBarrier} (in package \texttt{pcd.assignment01.util}) is implemented from scratch using Java's built-in monitor protocol (\texttt{synchronized}, \texttt{wait()}, \texttt{notifyAll()}). It maintains three fields: \texttt{parties} (the total number of threads that must call \texttt{await()} before the barrier fires), \texttt{count} (the number of threads still outstanding), and \texttt{generation} (an integer that increments on each firing and is used as the condition variable to distinguish the current cycle from the next one, guarding against spurious wakeups).
+ 
+When the last thread arrives (\texttt{count == 0}), it resets \texttt{count} to \texttt{parties}, increments \texttt{generation}, and calls \texttt{notifyAll()}. All waiting threads check \texttt{myGeneration == generation} as their loop condition: once the generation advances, they know the barrier has fired and they exit the wait.
+ 
+The barrier also maintains a \texttt{broken} flag. If any waiting thread is interrupted, it sets \texttt{broken = true} and calls \texttt{notifyAll()}, which causes every other waiting thread to wake up and throw \texttt{InterruptedException}.
+This prevents the pathological scenario where a single interrupted thread leaves \texttt{count} permanently non-zero, causing all other threads to block forever. The \texttt{broken} flag is cleared when the last thread successfully fires the
+barrier for the next generation.
+ 
+Two instances of \texttt{CyclicBarrier} are created per game, each with $\mathit{parties} = N + 1$ (one per worker plus the \texttt{UpdateThread}): \texttt{barrierPositions} separates phase~1 from phase~2, and \texttt{barrierCollisions} separates phase~2 from the sequential phases~3 and~4.
+
+	\item \textbf{Per-ball locking and deadlock prevention}: During phase~2, each worker acquires \texttt{synchronized} locks on two \texttt{Ball} objects before calling\\
+\texttt{Board.resolveBallCollision()}. To prevent deadlock, locks are always acquired in ascending index order (the index of the ball in the shared \texttt{allBalls} snapshot). Because this order is a strict total order and is respected by all workers, no circular wait can occur: a thread holding \texttt{lock(ball[i])} and waiting for \texttt{lock(ball[j])} with $i < j$ will never be blocked by another thread holding \texttt{lock(ball[j])} and waiting for \texttt{lock(ball[i])}.
+
+	\item \textbf{ConcurrentHashMap for \texttt{lastTouchedBy}}: The \texttt{lastTouchedBy} map is accessed from two different contexts: from
+\texttt{WorkerThread}s during phase~2 (to remove entries for colliding balls) and
+from the \texttt{UpdateThread} during phases~3 and~4 under the \texttt{Board} lock
+(to update and query entries). Using a \texttt{ConcurrentHashMap} makes individual
+operations on the map thread-safe without requiring a \texttt{synchronized(this)}
+block inside \texttt{resolveBallCollision()}. This eliminates a potential deadlock
+that would arise from the lock ordering \texttt{synchronized(ball)} $\to$
+\texttt{synchronized(board)}, which could interleave incorrectly with
+\texttt{synchronized(board)} held by\\
+\texttt{resolvePlayerCollisions()}.
+
+	\item \textbf{BotController monitor}: The \texttt{BotController} uses a private \texttt{Object botMonitor} as a condition
+variable. The \texttt{BotThread} waits on this monitor inside a guarded loop that
+checks both \texttt{running} and \texttt{board.isPlayer2Still()}. The
+\texttt{UpdateThread} calls \texttt{botController.signal()} once per tick; if
+player~2 is still, \texttt{signal()} calls \texttt{notifyAll()} on the monitor.
+The \texttt{stop()} method calls \texttt{notifyAll()} unconditionally, ensuring the
+\texttt{BotThread} is always unblocked on shutdown regardless of the ball's current
+velocity.
+
+	\item \textbf{ViewModel snapshot and thread safety}: All public methods of \texttt{ViewModel} are \texttt{synchronized} on the
+\texttt{ViewModel} instance. The \texttt{UpdateThread} calls \texttt{update()}
+once per tick, which replaces the internal collections with fresh copies of the
+model state. The EDT calls getters (\texttt{getBalls()}, \texttt{getPlayer1()},
+etc.) during repaints. Because \texttt{update()} returns deep copies
+(e.g.\ \texttt{new ArrayList<>(balls)}) and all getters return copies as well, the
+EDT never holds a reference to an object being mutated by the physics threads.
+\end{itemize}
+ 
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection{MVC and Multithreading Interaction}
+% ─────────────────────────────────────────────────────────────────────────────
+ 
+The interaction between the MVC layers in the presence of multiple threads is
+governed by three invariants:
+ 
+\begin{enumerate}
+    \item \textbf{The Model is only mutated by the controller.}
+          The EDT never calls any mutating method on \texttt{Board} except
+          \texttt{kickPlayer1()}, which is \texttt{synchronized}. The \texttt{BotThread}
+          calls only \texttt{kickPlayer2()}, also \texttt{synchronized}. All physics
+          mutations happen exclusively within the sequential and parallel phases
+          orchestrated by\\
+\texttt{GameController}.
+ 
+    \item \textbf{The View never reads the Model directly.}
+          \texttt{ViewFrame} and its inner\\
+\texttt{VisualiserPanel} read exclusively
+          from \texttt{ViewModel}. The snapshot is written once per tick by the
+          \texttt{UpdateThread} after all physics phases are complete, so the view
+          always paints a consistent state that reflects a completed tick.
+ 
+    \item \textbf{Game-over handling is atomic with respect to rendering.}
+          When\\
+\texttt{checkHolesAndGameOver()} sets \texttt{isGameOver = true}, the
+          \texttt{UpdateThread} detects this before calling \texttt{viewModel.update()}
+          or \texttt{view.render()}.
+
+It calls \texttt{handleGameOver()}, which writes
+          the winner message to \texttt{ViewModel} via \texttt{setGameOverMessage()},
+          and then renders one final frame. This ensures the game-over overlay is
+          shown on a frame that already reflects the final physical state, with no
+          intermediate partially-updated frame visible to the player.
+\end{enumerate}
+ 
+Figure~\ref{fig:thread-interaction} summarises the thread interactions and
+synchronization points for a single game tick.
+ 
+\begin{figure}[h]
+\centering
+\begin{verbatim}
+UpdateThread          WorkerThread-0 ... WorkerThread-N      BotThread
+    |                       |                   |                |
+    |-- startTick() ------> |                   |                |
+    |-- startTick() --------------------------> |                |
+    |                       |                   |                |
+    |             [Phase 1: position update - parallel]          |
+    |                       |                   |                |
+    |-- barrierPositions.await() ---------------|                |
+    |                       |-- await() ------> |                |
+    |          < barrier fires >                                  |
+    |                       |                   |                |
+    |             [Phase 2: collision - parallel, locked]        |
+    |                       |                   |                |
+    |-- barrierCollisions.await() --------------|                |
+    |                       |-- await() ------> |                |
+    |          < barrier fires >                                  |
+    |                       |                   |                |
+    |-- resolvePlayerCollisions() [sequential]                   |
+    |-- checkHolesAndGameOver()   [sequential]                   |
+    |                                                            |
+    |-- signal() ------------------------------------------>    |
+    |                                                       [wait or kick]
+    |-- viewModel.update()
+    |-- view.render()
+    |
+   (next tick)
+\end{verbatim}
+\caption{Thread interactions and synchronization points during a single game tick.}
+\label{fig:thread-interaction}
+\end{figure}
 
 \subsection{Architectural Overview for Task-Based Approach}
 The task-based concurrent implementation differs fundamentally 
