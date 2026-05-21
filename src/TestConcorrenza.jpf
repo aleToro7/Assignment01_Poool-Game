@@ -1,0 +1,23 @@
+# Classe main
+target = pcd.assignment01.MainJPF
+classpath = .
+
+# ── Limiti ───────────────────────────────────────────────────────────────────
+search.depth_limit = 500
+jvm.args = -Xmx2g
+
+# ── Proprietà ────────────────────────────────────────────────────────────────
+listener = gov.nasa.jpf.listener.DeadlockAnalyzer
+
+# ── Partial order reduction ──────────────────────────────────────────────────
+vm.por = true
+vm.por.sync_detection = true
+
+# ── Ignora System.currentTimeMillis() ───────────────────────────────────────
+# JPF modella il tempo come non deterministico: lo fissiamo a 0
+# per evitare che il bot loop esploda lo stato space
+vm.time.model = pcd.assignment01.MainJPF
+
+# ── Output ────────────────────────────────────────────────────────────────────
+report.console.property_violation = error,snapshot,trace
+report.console.finished = result,statistics

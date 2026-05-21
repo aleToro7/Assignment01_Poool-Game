@@ -3,8 +3,6 @@ package pcd.assignment01.controller;
 import pcd.assignment01.model.Board;
 import pcd.assignment01.model.V2d;
  
-import java.util.Random;
- 
 /**
  * BotController gestisce il comportamento del bot (player2) in un thread dedicato.
  *
@@ -13,6 +11,9 @@ import java.util.Random;
  *  - stop()   → segnala terminazione e sveglia il thread se in wait
  *  - signal() → chiamato dall'updateLoop ogni tick per svegliare il bot
  *               se la pallina è ferma
+ *
+ * Il botMonitor vive qui: è un meccanismo di coordinamento tra thread,
+ * non stato di dominio del gioco.
  */
 public class BotController {
  
@@ -42,12 +43,13 @@ public class BotController {
  
     public void stop() {
         running = false;
-        
-        synchronized (botMonitor) {
-            botMonitor.notifyAll();
-        }
+        signal(); // sveglia il thread se è bloccato in wait
     }
  
+    /**
+     * Chiamato dall'updateLoop ad ogni tick.
+     * Sveglia il botLoop solo se player2 è fermo, evitando notifiche inutili.
+     */
     public void signal() {
         if (board.isPlayer2Still()) {
             synchronized (botMonitor) {
@@ -61,12 +63,14 @@ public class BotController {
     // -------------------------------------------------------------------------
  
     private void botLoop() {
-        var  rand        = new Random(2);
+        // java.util.Random non è supportato da JPF 8 su Java 11+
+        // (JPF_java_util_Random accede a jdk.internal.misc.Unsafe non esportato).
+        // Usiamo un generatore LCG deterministico minimale che JPF sa modellare.
+        long seed = 2L;
         long lastKickTime = 0;
- 
+
         while (running && !board.isGameOver()) {
- 
-            // Attendi che player2 sia fermo
+
             synchronized (botMonitor) {
                 while (running && !board.isPlayer2Still() && !board.isGameOver()) {
                     try {
@@ -77,12 +81,16 @@ public class BotController {
                     }
                 }
             }
- 
+
             if (!running || board.isGameOver()) return;
- 
+
             long now = System.currentTimeMillis();
             if (now - lastKickTime >= KICK_COOLDOWN_MS) {
-                double angle   = rand.nextDouble() * Math.PI * 0.25 + Math.PI * 0.75;
+                // LCG: next = (a*seed + c) mod m  — costanti di Knuth
+                seed = (seed * 6364136223846793005L + 1442695040888963407L);
+                // Mappa seed in [0.0, 1.0)
+                double randVal = (double)(seed & 0x7FFFFFFFFFFFFFFFL) / (double)Long.MAX_VALUE;
+                double angle   = randVal * Math.PI * 0.25 + Math.PI * 0.75;
                 V2d    impulse = new V2d(Math.cos(angle), Math.sin(angle)).mul(KICK_SPEED);
                 board.kickPlayer2(impulse);
                 lastKickTime = now;

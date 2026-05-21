@@ -3,9 +3,9 @@ package pcd.assignment01;
 import pcd.assignment01.controller.GameController;
 import pcd.assignment01.controller.InputHandler;
 import pcd.assignment01.model.Board;
-import pcd.assignment01.util.LargeBoardConf;
+// import pcd.assignment01.util.LargeBoardConf;
 // import pcd.assignment01.util.MinimalBoardConf;
-// import pcd.assignment01.util.MassiveBoardConf;
+import pcd.assignment01.util.MassiveBoardConf;
 import pcd.assignment01.view.View;
 import pcd.assignment01.view.ViewModel;
  
@@ -16,7 +16,7 @@ public class Main {
  
         // Model
         var board = new Board();
-        board.init(new LargeBoardConf());
+        board.init(new MassiveBoardConf());
  
         // View
         var viewModel = new ViewModel();
