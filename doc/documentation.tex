@@ -99,6 +99,9 @@ Without proper synchronization, the following race conditions can occur:
     \item \textbf{Collision Detection Errors}: Detecting collisions while positions change
 \end{itemize}
 
+\subsection{Multi Threaded Related Challenges}
+Da valutare qualcosa da aggiungere se diverse dalla parte task based, altrimenti unificare
+
 \subsection{Task-based Related Challenges}
 The task-based concurrent implementation using the Executor Framework introduces a different 
 set of challenges compared to the thread-per-entity model. 
@@ -260,8 +263,7 @@ The application runs five categories of threads simultaneously during a game:
           initialization on the EDT via \texttt{SwingUtilities.invokeLater}.
           It exits immediately after.
  
-    \item \textbf{Event Dispatch Thread (EDT)}: the standard Swing thread.
-          It handles key events (forwarded by \texttt{InputHandler}) and executes
+    \item \textbf{Event Dispatch Thread (EDT)}: It handles key events (forwarded by the Input Handler) and executes
           repaints triggered by \texttt{panel.repaint()}. It never touches
           \texttt{Board} directly: key events call \texttt{board.kickPlayer1()},
           which is \texttt{synchronized}, and repaints read only from
@@ -275,7 +277,7 @@ The application runs five categories of threads simultaneously during a game:
           $(N+1)$-th party, allowing it to perform the sequential post-barrier
           phases without additional synchronization.
  
-    \item \textbf{WorkerThread-0 \ldots WorkerThread-N}: a pool of
+    \item \textbf{WorkerThread-0 \ldots WorkerThread-N}: a pool that contains exactly\\ 
           $N = \texttt{availableProcessors()} + 1$ persistent daemon threads,
           created once at startup and never recreated. Each worker waits on its
           private \texttt{tickMonitor} until \texttt{GameController} calls
@@ -302,19 +304,56 @@ execute in parallel across the worker pool.
 
 	\item \textbf{Position update (parallel)}: The list of small balls is divided into $N$ contiguous, disjoint partitions using a balanced split (each partition differs in size by at most one element). Each \texttt{WorkerThread} receives its partition and calls \texttt{ball.updateState(dt)} on every ball it owns. Because the partitions are disjoint, no two workers write to the same \texttt{Ball} object during this phase, and no locking is required.
 
-After finishing, each worker calls \texttt{barrierPositions.await()}. The \texttt{UpdateThread} also calls \texttt{barrierPositions.await()} as the $(N+1)$-th party. The barrier scatters all threads into phase~2 only once every worker (and the controller) has finished phase~1, guaranteeing that all positions are fully updated before any collision is resolved.
+After finishing, each worker calls \texttt{barrierPositions.await()}. The \texttt{UpdateThread} also calls \texttt{barrierPositions.await()} as the $(N+1)$-th party. The barrier scatters all threads into phase~3 only once every worker (and the controller) has finished phase~2, guaranteeing that all positions are fully updated before any collision is resolved.
 
-	\item \textbf{Ball-ball collision resolution (parallel)}: Each worker resolves collisions between its own balls and all balls with a higher index in the global \texttt{allBalls} list. Formally, worker $i$ owns balls with indices $[\mathit{start}_i, \mathit{start}_i + |\mathit{partition}_i|)$ and processes pairs $(a, b)$ where $\mathit{idx}(a) < \mathit{idx}(b)$. This scheme ensures that each pair is processed exactly once across all workers, eliminating the $O(n^2)$ duplication that would arise from a naive per-worker full scan.
+	\item \textbf{Spatial grid construction (Worker-0 only)}: After all positions have been updated in phase~2, computing ball-ball collisions naively requires checking all $O(n^2)$ pairs. To reduce this to $O(n)$ on average, the application uses a \textbf{spatial hashing grid} implemented in the \texttt{SpatialGrid} class (package \texttt{pcd.assignment01.util}).
  
-Concurrent access to the same \texttt{Ball} object by different workers is possible at partition boundaries. To prevent data races, each worker acquires two \texttt{synchronized} locks — one on each ball — before calling \texttt{board.resolveBallCollision()}. The locks are always acquired in index order (lower index first), which is the canonical lock-ordering protocol that eliminates the possibility of deadlock: no cycle can form in the lock-dependency graph because the ordering is strict and total.
+The field is partitioned into square cells of side $\mathit{cellSize} = 2 \cdot r_{\text{ball}} + \varepsilon$, where $r_{\text{ball}} = 0.01$ is the radius of the small balls. This choice guarantees that two balls whose centres lie in non-adjacent cells have distance $> \mathit{cellSize} > 2 \cdot r_{\text{ball}}$ and therefore cannot overlap: no colliding pair is ever missed by checking only the $3 \times 3$ neighbourhood of cells around each ball.
  
-The index-based ordering also replaces the earlier use of \texttt{System.identityHashCode()} as the canonical key, which was unsafe because two distinct objects can share the same identity hash code, breaking the strict total order required for deadlock freedom.
+The grid is stored as a \texttt{HashMap<CellKey, List<Ball>>}, where \texttt{CellKey} is a value type wrapping the integer column and row indices of a cell. Using a hash map rather than a dense 2D array avoids allocating memory for the large number of empty cells that arise with sparse ball distributions.
  
-After finishing, each worker calls \texttt{barrierCollisions.await()}, and the\\
-\texttt{UpdateThread} does the same. The barrier guarantees that all ball-ball collisions are fully resolved before the sequential phases begin.
+The grid must be rebuilt every tick because ball positions change in phase~2. Rather than reconstructing it in the sequential section (which would waste the time between the two barriers), the rebuild is assigned exclusively to \textbf{Worker-0} (\texttt{isGridBuilder == true}). All other workers reach \texttt{barrierGrid.await()} immediately and block. Worker-0 calls \texttt{grid.build(allBalls)}, which clears the map and re-inserts every ball into its cell in $O(n)$, then also calls \texttt{barrierGrid.await()}.
+ 
+When \texttt{barrierGrid} fires, the Java Memory Model guarantees a \emph{happens-before} relationship between Worker-0's writes to the grid and all subsequent reads by the other workers in phase~2: no additional synchronization is
+needed to read the grid safely.
+ 
+The three \texttt{CyclicBarrier} instances now partition each tick into four synchronization points:
+ 
+\[
+\text{barrierPositions} \;\to\; \text{barrierGrid} \;\to\; \text{barrierCollisions}
+\]
+ 
+Each barrier is constructed with $\mathit{parties} = N + 1$ (one per worker plus the \texttt{UpdateThread}), so the \texttt{UpdateThread} participates in all three barriers and proceeds to the sequential phases only after every worker has completed phase~3.
 
-	\item \textbf{Player collision resolution (sequential)}: \texttt{GameController} calls\\ 
-\texttt{board.resolvePlayerCollisions()}, which is \texttt{synchronized} on \texttt{Board}. This method resolves collisions between each player and every small ball, and between the two players themselves. It also updates the \texttt{lastTouchedBy} map, which records the last player to touch each small ball and is used for scoring. This phase is sequential because both player objects are shared across all potential pairs, making fine-grained locking impractical.
+	\item \textbf{Ball-ball collision resolution with spatial hashing (parallel)}
+ 
+Each worker iterates over its partition and, for each ball~$a$, calls
+\texttt{grid.getCandidates(a)} to obtain the balls in the $3 \times 3$ cell
+neighbourhood. This returns on average only a small constant number of candidates
+(proportional to local ball density) instead of all $n$ balls, reducing the total
+work across all workers from $O(n^2)$ to $O(n)$ on average.
+ 
+Each worker also builds a \texttt{Map<Ball, Integer>} index (populated in
+\texttt{startTick()}) that maps every ball to its position in the shared
+\texttt{allBalls} snapshot. This allows $O(1)$ index lookup during phase~3,
+replacing the earlier $O(n)$ \texttt{indexOf()} call that would have negated the
+benefit of the spatial grid.
+ 
+The canonical lock-ordering protocol is preserved: a worker processes the pair
+$(a, b)$ only if $\mathit{idx}(a) < \mathit{idx}(b)$, ensuring each pair is
+handled exactly once across all workers. Locks are acquired in ascending index
+order (\texttt{synchronized(a)} then \texttt{synchronized(b)}), which eliminates
+the possibility of deadlock by the same argument as before.
+ 
+The performance improvement is significant with dense configurations. With the 
+\texttt{MassiveBoardConf} (4\,500 balls), the naive $O(n^2)$ approach requires
+checking approximately $10^7$ pairs per tick. With the spatial grid, each ball
+checks on average fewer than 10 neighbours, reducing the total to roughly
+$45\,000$ candidate pairs — a reduction of more than two orders of magnitude.
+
+	\item \textbf{Player collision resolution (sequential)}: \texttt{GameController} calls the method 
+\texttt{board.resolvePlayerCollisions()}, which is \texttt{synchronized} on \texttt{Board}.\\
+This method resolves collisions between each player and every small ball, and between the two players themselves. It also updates the \texttt{lastTouchedBy} map, which records the last player to touch each small ball and is used for scoring. This phase is sequential because both player objects are shared across all potential pairs, making fine-grained locking impractical.
 
 	\item \textbf{Hole detection and game-over (sequential)}: \texttt{GameController} calls\\
 \texttt{board.checkHolesAndGameOver()}, which is also \texttt{synchronized} on \texttt{Board}. It checks whether any ball or player has entered a hole, removes sunk balls from the list, increments scores using \texttt{lastTouchedBy}, and sets \texttt{isGameOver} if appropriate. This phase is sequential because it mutates the shared \texttt{balls} list and the scoring state atomically.
@@ -402,43 +441,18 @@ It calls \texttt{handleGameOver()}, which writes
           shown on a frame that already reflects the final physical state, with no
           intermediate partially-updated frame visible to the player.
 \end{enumerate}
- 
-Figure~\ref{fig:thread-interaction} summarises the thread interactions and
-synchronization points for a single game tick.
- 
+
 \begin{figure}[h]
 \centering
-\begin{verbatim}
-UpdateThread          WorkerThread-0 ... WorkerThread-N      BotThread
-    |                       |                   |                |
-    |-- startTick() ------> |                   |                |
-    |-- startTick() --------------------------> |                |
-    |                       |                   |                |
-    |             [Phase 1: position update - parallel]          |
-    |                       |                   |                |
-    |-- barrierPositions.await() ---------------|                |
-    |                       |-- await() ------> |                |
-    |          < barrier fires >                                  |
-    |                       |                   |                |
-    |             [Phase 2: collision - parallel, locked]        |
-    |                       |                   |                |
-    |-- barrierCollisions.await() --------------|                |
-    |                       |-- await() ------> |                |
-    |          < barrier fires >                                  |
-    |                       |                   |                |
-    |-- resolvePlayerCollisions() [sequential]                   |
-    |-- checkHolesAndGameOver()   [sequential]                   |
-    |                                                            |
-    |-- signal() ------------------------------------------>    |
-    |                                                       [wait or kick]
-    |-- viewModel.update()
-    |-- view.render()
-    |
-   (next tick)
-\end{verbatim}
-\caption{Thread interactions and synchronization points during a single game tick.}
+\includegraphics[width=1\textwidth]{images/Sequence Diagram.png}
+\caption{Sequence Diagram of thread interactions and synchronization points during a single game tick.}
 \label{fig:thread-interaction}
 \end{figure}
+ 
+Figure~\ref{fig:thread-interaction} illustrates the interactions between the active threads of the system during a single game tick. Five participants are represented: the \texttt{UpdateThread}, which orchestrates the entire tick; \texttt{WorkerThread-0}, which additionally acts as the spatial grid builder; \texttt{WorkerThread-1..N}, representing all remaining worker threads which behave identically; the \texttt{BotThread}, which operates independently; and \texttt{Board}, included as a passive participant to make explicit which methods are invoked sequentially and by which thread. The Event Dispatch Thread is intentionally omitted, as it interacts with the system exclusively through \texttt{synchronized} methods on \texttt{Board} and \texttt{ViewModel} and does not participate in any of the barrier synchronization points shown.
+The diagram covers five phases. In \textbf{Phase 0}, the \texttt{UpdateThread} sequentially calls \texttt{board.updatePlayers(dt)} before any parallel work begins. In \textbf{Phase 1}, the \texttt{UpdateThread} dispatches \texttt{startTick()} to all workers and immediately blocks on \texttt{barrierPositions.await()}, while \texttt{WorkerThread-0} and \texttt{WorkerThread-1..N} update the positions of their respective ball partitions in parallel. The first red dashed line marks the firing of \texttt{barrierPositions}, after which all threads are guaranteed to have completed position updates. In \textbf{Phase G}, only \texttt{WorkerThread-0} performs work — rebuilding the \texttt{SpatialGrid} from the updated positions — while all other threads block immediately on \texttt{barrierGrid.await()}. The asymmetry in activation box lengths communicates this visually: \texttt{WorkerThread-0} has a tall box while the others have near-zero boxes. The second red dashed line marks the firing of \texttt{barrierGrid}, establishing the happens-before relationship that allows all workers to safely read the grid in the next phase. In \textbf{Phase 2}, all workers resolve ball-ball collisions in parallel using the spatial grid, acquiring per-ball locks in canonical index order to prevent deadlock, while the \texttt{UpdateThread} again blocks immediately. The third red dashed line marks the firing of \texttt{barrierCollisions}. Finally, in \textbf{Phases 3 and 4}, the \texttt{UpdateThread} exclusively calls \texttt{board.resolvePlayerCollisions()} and \texttt{board.checkHolesAndGameOver()} sequentially, then signals the \texttt{BotThread} via \texttt{signal()} before updating the \texttt{ViewModel} and triggering a render.
+ 
+
 
 \subsection{Architectural Overview for Task-Based Approach}
 The task-based concurrent implementation differs fundamentally 
