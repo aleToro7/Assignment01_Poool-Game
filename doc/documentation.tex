@@ -864,43 +864,55 @@ The \texttt{CyclicBarrier} is a custom synchronization primitive implemented
 from scratch. Modelling it as a Petri Net allows its correctness properties —
 absence of deadlock, liveness, and automatic reset — to be verified
 independently of the application logic that uses it.
-
-The net models a barrier with $N = 3$ parties (the number used during JPF
-verification: two \texttt{WorkerThread}s and the \texttt{UpdateThread}). Each
-party is represented by a dedicated input place $P_{i}$ carrying an initial
-token, and a dedicated output place $P_{i}'$. A single transition
-\textit{barrier fires} consumes one token from each input place and produces
-one token in each output place.
-
-%\begin{figure}[h]
-%\centering
-%\includegraphics[width=0.75\textwidth]{petri_cyclic_barrier}
-%\caption{Petri Net modelling the \texttt{CyclicBarrier} with $N = 3$ parties.
-%         The transition \textit{barrier fires} is enabled only when all three
-%         input places hold a token simultaneously.}
-%\label{fig:petri-barrier}
-%\end{figure}
-
+ 
+The net represents a generic barrier with $N+1$ parties, where $N$ is the
+number of worker threads. Two representative rows are shown explicitly (Thread~0
+and Thread~$N{+}1$), with the intermediate threads indicated by the vertical
+ellipsis ($\vdots$). Each thread is modelled by three places: \textit{free}
+(initial state, carries the initial token), \textit{wait} (the thread has
+called \texttt{await()} and is blocked), and \textit{done} (the thread has
+been released by the barrier and is proceeding). The arc from \textit{done}
+back to \textit{free} models the cyclic reset: after each tick the thread
+returns to its initial state, ready for the next barrier cycle.
+ 
+The single vertical transition \textit{barrier fires} is the core of the net.
+It has $N+1$ incoming arcs — one from each \textit{wait} place — and $N+1$
+outgoing arcs — one to each \textit{done} place. It is enabled if and only if
+all $N+1$ \textit{wait} places simultaneously hold a token, which corresponds
+exactly to the condition \texttt{count == 0} in the Java implementation.
+ 
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{images/petri_cyclic_barrier.png}
+\caption{Petri Net modelling the \texttt{CyclicBarrier} with $N+1$ parties.
+         Thread~0 and Thread~$N{+}1$ are shown explicitly; intermediate threads
+         follow the same structure. The transition \textit{barrier fires} is
+         enabled only when all \textit{wait} places hold a token simultaneously.}
+\label{fig:petri-barrier}
+\end{figure}
+ 
 The key properties visible from the net structure are the following.
-
+ 
 \textbf{Absence of deadlock.} The transition \textit{barrier fires} is enabled
-if and only if all $N$ input places simultaneously hold a token. Since every
-party eventually deposits its token (no alternative path exists in the net),
-the transition is guaranteed to fire. No subset of parties can block the others
-indefinitely.
-
-\textbf{Liveness.} After \textit{barrier fires}, every output place $P_{i}'$
-receives a token, allowing all parties to proceed. The net is live: every
-transition that is ever enabled will eventually fire in any fair execution.
-
-\textbf{Cyclic reset.} The output places $P_{i}'$ are connected back to the
-input places $P_{i}$ of the next barrier cycle (not shown in the figure for
-clarity), restoring the initial marking and making the barrier ready for the
-next tick without reallocation.
-
-\textbf{Boundedness.} The net is 1-safe: at most one token can reside in any
-place at any time. This follows from the fact that each party deposits exactly
-one token per cycle, and the transition consumes all tokens atomically.
+if and only if every thread has deposited its token in its \textit{wait} place.
+Since each thread has no alternative path that bypasses \textit{wait}, every
+token will eventually arrive there, guaranteeing that the transition fires. No
+subset of threads can block the others indefinitely.
+ 
+\textbf{Liveness.} After \textit{barrier fires}, every \textit{done} place
+receives a token, releasing all threads simultaneously. The net is live: in
+any fair execution, every reachable marking eventually leads to the barrier
+firing and all threads proceeding.
+ 
+\textbf{Cyclic reset.} The arc from \textit{done} back to \textit{free}
+restores the initial marking after each cycle, making the barrier reusable
+across ticks without reallocation. This corresponds to the \texttt{generation}
+counter and the \texttt{count} reset in the Java implementation.
+ 
+\textbf{Boundedness.} The net is 1-safe: at most one token resides in any
+place at any time. Each thread produces exactly one token per cycle, the
+transition consumes all tokens atomically, and the loop arc returns exactly
+one token to \textit{free}. No accumulation is possible.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \subsection{Multi-Threaded Tick Flow}
