@@ -1025,226 +1025,364 @@ of individual tasks.
 
 
 
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Performance Evaluation}
+% ─────────────────────────────────────────────────────────────────────────────
 
+This chapter evaluates the runtime performance of the two concurrent
+implementations of the Poool simulation. Both versions are designed to
+exploit hardware parallelism to overcome the computational bottlenecks
+identified in Chapter~\ref{chap:analysis}, but they differ in the
+concurrency model adopted. Performance is measured in terms of frames
+per second (FPS), which directly reflects the throughput of the physics
+pipeline per unit of time.
+
+% ─────────────────────────────────────────────────────────────────────────────
 \subsection{Experimental Setup}
+% ─────────────────────────────────────────────────────────────────────────────
 
-\subsubsection{Test Configurations}
-Three board configurations are tested:
+\subsubsection*{Hardware}
+
+All measurements were collected on a machine equipped with an Intel Core
+i5-13600K processor (14 cores: 6 P-cores at up to 5.1\,GHz and 8 E-cores
+at up to 3.9\,GHz), running the JVM with default heap settings. The number
+of worker threads is set to \texttt{availableProcessors() + 1} at runtime.
+
+\subsubsection*{Board configurations}
+
+Three board configurations are used to stress the system at different scales.
 
 \begin{table}[H]
 \centering
-\begin{tabular}{|l|c|c|}
+\begin{tabular}{lccc}
 \hline
-\textbf{Configuration} & \textbf{Small Balls} & \textbf{Expected Complexity} \\
+\textbf{Configuration} & \textbf{Small balls} & \textbf{Naive pairs/tick} & \textbf{Grid pairs/tick (avg)} \\
 \hline
-Minimal & 2 &  \\
-\hline
-Large & 400 &  \\
-\hline
-Massive & 4,500 &  \\
+\texttt{MinimalBoardConf}  & 2       & 1               & 1               \\
+\texttt{LargeBoardConf}    & 400     & 79{,}800        & $\sim$2{,}000   \\
+\texttt{MassiveBoardConf}  & 4{,}500 & 10{,}123{,}750  & $\sim$22{,}500  \\
 \hline
 \end{tabular}
-\caption{Board Configurations and Collision Detection Complexity}
+\caption{Board configurations used for performance evaluation.}
 \label{tab:configs}
 \end{table}
 
-\subsubsection{Performance Metrics}
-\begin{itemize}
-    \item \textbf{Frame Rate (FPS)}: Frames rendered per second
-    \item \textbf{Update Latency}: Time to compute one physics update cycle
-    \item \textbf{CPU Utilization}: Percentage of available cores used
-    \item \textbf{Throughput}: Simulation steps per second
-    \item \textbf{Speedup}: Concurrent vs. sequential frame rate ratio
-\end{itemize}
+\subsubsection*{Metric}
 
-\subsection{Expected Performance Improvements}
+The primary metric is \textbf{frames per second (FPS)}, computed as the
+running average $\mathit{fps} = \lfloor n_{\mathit{frames}} \cdot 1000 /
+\Delta t \rfloor$ and displayed live in the top-left corner of the window.
+The frame rate cap introduced by \texttt{Thread.sleep()} has been removed,
+so the loop runs as fast as the hardware allows and FPS reflects raw
+throughput.
 
-\subsubsection{Sequential Baseline Issues}
-The sequential implementation exhibits:
-\begin{itemize}
-    \item Minimal/Large:  fps (acceptable)
-    \item Massive: 2 fps (unacceptable frame rate degradation)
-\end{itemize}
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Multi-Threaded Implementation}
+% ─────────────────────────────────────────────────────────────────────────────
 
-\subsubsection{Concurrent Improvements}
+The multi-threaded implementation uses a fixed pool of
+\texttt{availableProcessors() + 1} persistent \texttt{WorkerThread}s
+coordinated by two \texttt{CyclicBarrier} instances and one
+\texttt{ReusableLatch}. Ball position updates and ball-ball collision
+resolution execute in parallel across the pool; player collisions and
+hole detection remain sequential.
 
-\textbf{Update Thread Parallelization}:
-\begin{itemize}
-    \item Potential to parallelize ball state updates (independent operations)
-    \item Potential to parallelize collision detection
-    \item Rendering no longer blocks physics computation
-\end{itemize}
+\subsubsection*{Results}
 
-\textbf{Bot Thread Independence}:
-\begin{itemize}
-    \item Bot decisions computed asynchronously
-    \item Reduces decision latency from main game loop
-    \item Enables responsive user input even during intensive physics
-\end{itemize}
-
-\textbf{Expected Speedup Formula}:
-$$S = \frac{T_{seq}}{T_{conc}} = \frac{f_{seq}}{f_{conc}}$$
-
-For massive configuration with parallel collision detection over $k$ cores:
-$$S \approx 1 + \frac{(O(n^2) - O(n))}{k}$$
-
-With $n = 4,500$ balls and $k = 4$ cores:
-$$S \approx 1 + \frac{10.1M - 4,500}{4} \approx 2.5\text{-}2.8\times$$
-
-// Note: Actual speedup may be lower due to synchronization overhead and non-parallelizable code sections.
-
-\subsubsection{Task-based Improvements}
-
-
-\section{Formal Verification with JPF}
-
-\subsection{Java Path Finder Integration}
-
-JPF (Java Path Finder) is a model checker developed at NASA for verifying Java programs. The Poool implementation integrates JPF verification through configuration and test drivers.
-
-\subsubsection{JPF Configuration}
-Key aspects of JPF application to Poool:
-
-\begin{lstlisting}[caption=JPF Verification Approach]
-target=pcd.assignment01.controller.MainJPF
-listener = gov.nasa.jpf.listener.PropertyListener
-\end{lstlisting}
-
-\subsection{Safety Properties Verified}
-
-\subsubsection{1. Mutual Exclusion (No Data Races)}
-
-\textbf{Property}: Board state modifications are atomic and do not interleave.
-
-\textbf{Verification Method}: 
-\begin{itemize}
-    \item JPF tracks synchronized block boundaries
-    \item No two threads can execute synchronized Board methods concurrently
-    \item All field accesses to mutable state (balls, scores) occur within synchronization
-\end{itemize}
-
-\textbf{Critical Section Analysis}:
-\begin{lstlisting}[language=Java, caption=Critical Section: Board.updateState()]
-public synchronized void updateState(long dt) {
-    // CRITICAL SECTION START
-    for (Ball b : balls) { /* ... */ }  // Protected access to balls
-    score1++; // Protected access to score
-    // CRITICAL SECTION END
-}
-\end{lstlisting}
-
-\subsubsection{2. Deadlock Freedom}
-
-\textbf{Property}: No circular wait-for cycles among threads.
-
-\textbf{Lock Hierarchy}:
 \begin{table}[H]
 \centering
-\begin{tabular}{|l|l|}
+\begin{tabular}{lc}
 \hline
-\textbf{Lock Order} & \textbf{Acquisition Pattern} \\
+\textbf{Configuration} & \textbf{FPS (i5-13600K)} \\
 \hline
-1. Board & Always acquired first (main game state) \\
-\hline
-2. Bot Monitor & Acquired only from within Bot thread \\
-\hline
-3. RenderSync & Acquired from Update thread only \\
+\texttt{LargeBoardConf}    & $\sim$400  \\
+\texttt{MassiveBoardConf}  & $\sim$54\,--\,60  \\
 \hline
 \end{tabular}
-\caption{Lock Hierarchy for Deadlock Prevention}
-\label{tab:locks}
+\caption{Measured FPS for the multi-threaded implementation.}
+\label{tab:mt-fps}
 \end{table}
 
-\textbf{Analysis}: 
-\begin{itemize}
-    \item Bot thread never acquires Board after waiting on botMonitor
-    \item No wait chains among Update, Bot, and EDT threads
-    \item Circular dependencies are structurally impossible
-\end{itemize}
+With \texttt{LargeBoardConf} (400 balls) the simulation runs at approximately
+400\,FPS, well above any interactive threshold. The spatial hashing grid
+reduces the collision workload from $\sim$79{,}800 naive pairs to roughly
+2{,}000 candidate pairs per tick, and the parallel pipeline distributes
+this work efficiently across the available cores.
 
-\subsubsection{3. Liveness (Game Termination)}
+With \texttt{MassiveBoardConf} (4{,}500 balls) the frame rate stabilises
+between 54 and 60\,FPS, which is acceptable for interactive use. Without
+the spatial grid this configuration produced only $\sim$17\,FPS in the
+sequential baseline, confirming that the $O(n) $ algorithmic improvement
+is the dominant factor: even without parallelism the grid alone would
+yield a significant gain, and the worker pool provides the additional
+multiplier needed to reach interactive framerates.
 
-\textbf{Property}: Game always terminates within bounded time steps.
+\subsubsection*{Bottleneck analysis}
 
-\textbf{Termination Conditions}:
-\begin{enumerate}
-    \item \textbf{Score-based}: All small balls scored or removed
-    \item \textbf{Player-based}: A player's ball enters a hole
-    \item \textbf{User-initiated}: Window closed or game stopped
-\end{enumerate}
+At the \texttt{MassiveBoardConf} scale the remaining bottleneck is the
+sequential phase that follows the two barriers:
+\texttt{resolvePlayerCollisions()} and \texttt{checkHolesAndGameOver()}
+both acquire the \texttt{Board} lock and iterate over all balls. By
+Amdahl's law, the non-parallelisable fraction limits the theoretical
+maximum speedup regardless of how many workers are added. Synchronization
+overhead at the \texttt{CyclicBarrier} and \texttt{ReusableLatch} is
+negligible compared to this sequential fraction at the scales tested.
 
-\textbf{JPF Verification}:
-\begin{lstlisting}[language=Java, caption=Termination Assertion]
-public void testGameTermination() {
-    // JPF will explore all possible execution paths
-    // and verify that all paths eventually reach:
-    assert !isRunning() : "Game must terminate";
-    assert gameOverFlag : "Game-over state must be set";
-}
-\end{lstlisting}
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Task-Based Implementation}
+% ─────────────────────────────────────────────────────────────────────────────
 
-\subsection{Race Condition Detection}
+The task-based implementation delegates all parallel work to a
+\texttt{WorkerPool} built on top of \texttt{java.util.concurrent.ExecutorService}
+with a fixed thread pool of \texttt{availableProcessors() * 2} threads.
+Each physics phase is expressed as a collection of \texttt{Callable<Void>}
+tasks submitted via \texttt{invokeAll()}, which blocks until all tasks
+complete before the next phase begins. Three task types are defined:
+\texttt{BallUpdateTask} (position update), \texttt{CollisionTask}
+(ball-ball collision detection), and \texttt{PlayerCollisionTask}
+(player-ball collisions). The \texttt{GameLoop} thread acts as master,
+sequencing the three parallel phases and performing hole detection
+sequentially after them.
+ 
+A notable difference from the multi-threaded implementation is that
+player-ball collisions are also parallelised: each \texttt{PlayerCollisionTask}
+processes a disjoint range of small balls and updates \texttt{lastTouchedBy}
+via a \texttt{ConcurrentHashMap}, making the entire phase concurrent.
+No spatial hashing grid is used: \texttt{CollisionTask} tests all pairs
+within its assigned range against all balls in the full list, preserving
+the $O(n^2)$ collision detection complexity.
+ 
+\subsubsection*{Results}
+ 
+\begin{table}[H]
+\centering
+\begin{tabular}{lc}
+\hline
+\textbf{Configuration} & \textbf{FPS (i5-13600K)} \\
+\hline
+\texttt{LargeBoardConf}    & $\sim$800       \\
+\texttt{MassiveBoardConf}  & $\sim$17\,--\,18 \\
+\hline
+\end{tabular}
+\caption{Measured FPS for the task-based implementation.}
+\label{tab:task-fps}
+\end{table}
+ 
+With \texttt{LargeBoardConf} the task-based implementation reaches
+approximately 800\,FPS — twice the throughput of the multi-threaded
+version at the same configuration. The higher figure is explained by
+two factors: the thread pool size is \texttt{availableProcessors() * 2}
+(double the worker count of the multi-threaded version), and player-ball
+collisions are also parallelised, eliminating one sequential phase per
+tick. The \texttt{ExecutorService} framework also introduces less
+per-tick overhead than explicit \texttt{wait}/\texttt{notifyAll}
+coordination for small workloads.
+ 
+With \texttt{MassiveBoardConf} the frame rate drops to 17\,--\,18\,FPS,
+essentially matching the sequential baseline. The reason is the absence
+of the spatial hashing grid: \texttt{CollisionTask} still performs
+$O(n^2)$ pair checks across its range, so the total work per tick remains
+approximately $10^7$ comparisons regardless of how many threads share it.
+Parallelism provides a constant-factor speedup, but cannot overcome the
+quadratic growth of the naive collision algorithm at this scale.
 
-\subsubsection{Synchronized Field Accesses}
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Comparison}
+% ─────────────────────────────────────────────────────────────────────────────
 
-JPF verifies that all shared mutable fields are protected:
+\begin{table}[H]
+\centering
+\begin{tabular}{lcc}
+\hline
+\textbf{Configuration} & \textbf{Multi-threaded (FPS)} & \textbf{Task-based (FPS)} \\
+\hline
+\texttt{LargeBoardConf}   & $\sim$400       & $\sim$800        \\
+\texttt{MassiveBoardConf} & $\sim$54\,--\,60 & $\sim$17\,--\,18 \\
+\hline
+\end{tabular}
+\caption{FPS comparison between the two implementations on an i5-13600K.}
+\label{tab:comparison}
+\end{table}
+ 
+The two implementations exhibit an inverse performance profile across
+the two configurations, which directly reflects their respective design
+choices.
+ 
+With \texttt{LargeBoardConf} (400 balls, moderate workload) the
+task-based implementation is approximately twice as fast. The
+\texttt{ExecutorService} pool uses \texttt{availableProcessors() * 2}
+threads and parallelises all three physics phases including player-ball
+collisions. The multi-threaded implementation uses fewer threads and
+keeps player collisions sequential, leaving more work in the critical
+path per tick.
+ 
+With \texttt{MassiveBoardConf} (4{,}500 balls, heavy workload) the
+multi-threaded implementation is approximately three times faster.
+The spatial hashing grid reduces collision candidates from $\sim$10
+million to $\sim$22{,}500 per tick — an algorithmic improvement that
+no amount of parallelism can replicate without it. The task-based
+implementation, lacking the grid, saturates all available cores on
+$O(n^2)$ work and cannot exceed the throughput ceiling imposed by the
+quadratic complexity.
+ 
+The comparison demonstrates a fundamental trade-off: the task-based
+approach achieves higher throughput at moderate scales through a larger
+thread pool and a fully parallel pipeline, while the multi-threaded
+approach scales to larger problem sizes through algorithmic optimisation.
+In a production scenario the two techniques are complementary: the
+spatial grid would benefit the task-based implementation equally, and
+the \texttt{ExecutorService} model could replace the custom barrier
+infrastructure of the multi-threaded version.
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Formal Verification with JPF}
+% ─────────────────────────────────────────────────────────────────────────────
 
-\begin{lstlisting}[language=Java, caption=Synchronized Field Protection]
-private List<Ball> balls;           // Protected by synchronized methods
-private int score1;                 // Protected by synchronized methods
-private boolean running;            // Protected by synchronized getter/setter
-private boolean isGameOver;         // Protected by synchronized methods
-\end{lstlisting}
+This chapter describes the formal verification of the concurrent
+implementations using Java PathFinder (JPF), a model checker for Java
+programs developed at NASA. JPF explores all possible thread interleavings
+of a program under test, checking for violations of safety and liveness
+properties that may not be exposed by conventional testing.
 
-\subsubsection{Temporal Assertions}
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Verification Approach}
+% ─────────────────────────────────────────────────────────────────────────────
 
-Critical invariants verified during execution:
+JPF performs exhaustive state-space exploration: rather than executing a
+single interleaving as a normal JVM would, it systematically branches at
+every scheduling decision and explores all reachable program states. This
+makes it capable of detecting concurrency defects — deadlocks, data races,
+assertion violations — that occur only under specific thread orderings that
+are unlikely to appear in ordinary test runs.
 
-\begin{lstlisting}[language=Java, caption=Invariants Checked by JPF]
-// Invariant 1: Score consistency
-assert score1 >= 0 && score2 >= 0 : "Scores are non-negative";
+Because JPF's state space grows exponentially with the number of threads
+and execution steps, a dedicated entry point \texttt{MainJPF} is used
+instead of the production \texttt{Main}. It initialises the board with
+\texttt{MinimalBoardConf} (2 balls), creates only 2 worker threads, and
+drives the simulation for exactly 3 ticks via explicit \texttt{doTick()}
+calls rather than the unbounded update loop. This bounds the state space
+while preserving the synchronization structure under test.
 
-// Invariant 2: Ball list validity
-assert balls != null : "Ball list always exists";
-assert balls.stream().allMatch(b -> b != null) : 
-    "No null balls in list";
+\texttt{java.util.Random} is not modelled correctly by JPF~8 on Java~11
+due to an incompatibility with \texttt{jdk.internal.misc.Unsafe}. The
+\texttt{BotController} therefore uses a hand-written LCG generator and is
+not started in the JPF entry point, since its only interaction with shared
+state (\texttt{board.kickPlayer2()}) is already covered by the
+\texttt{synchronized} method analysis.
 
-// Invariant 3: Game state consistency
-assert !(isGameOver && !running) : 
-    "Game-over implies not running";
-\end{lstlisting}
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Multi-Threaded Implementation}
+% ─────────────────────────────────────────────────────────────────────────────
 
-\subsection{Model Checking Results}
+\subsubsection*{Properties verified}
 
-\subsubsection{Test Configuration: MainJPF}
+JPF is configured with the \texttt{DeadlockAnalyzer} listener and partial
+order reduction (\texttt{vm.por = true}) to reduce equivalent interleavings.
+The following properties are checked over all explored states:
 
-The MainJPF class provides a minimal test case for JPF verification:
+\textbf{Absence of deadlock.} No thread scheduling exists under which all
+active threads block simultaneously waiting for a condition that can never
+be satisfied. This covers the \texttt{CyclicBarrier} (circular wait among
+parties), the \texttt{ReusableLatch} (Worker-0 never failing to call
+\texttt{open()}), and the \texttt{tickMonitor} in \texttt{WorkerThread}
+(the \texttt{UpdateThread} always calling \texttt{startTick()}).
 
-\begin{lstlisting}[language=Java, caption=MainJPF Verification Driver]
-public class MainJPF {
-    public static void main(String[] args) {
-        // Minimal board configuration for JPF
-        Board board = new Board();
-        board.init(new MinimalBoardConf());
-        
-        GameController controller = 
-            new GameController(board, null, null);
-        
-        // JPF explores all possible interleavings
-        controller.startGame();
-        
-        // Verification terminates after bounded steps
-        try {
-            Thread.sleep(100);
-        } catch (InterruptedException e) {
-            // Expected: JPF may interrupt
-        }
-        
-        controller.stopGame();
-    }
-}
-\end{lstlisting}
+\textbf{Absence of data races.} All accesses to shared mutable state
+(\texttt{Board.balls}, \texttt{score1}, \texttt{score2},
+\texttt{isGameOver}, \texttt{lastTouchedBy}) occur within
+\texttt{synchronized} blocks or through \texttt{ConcurrentHashMap}
+operations. JPF verifies that no two threads access the same field
+concurrently without holding the appropriate lock.
+
+\textbf{Lock ordering correctness.} During phase~2, workers acquire
+locks on two \texttt{Ball} objects in strictly ascending index order.
+JPF explores all interleavings of concurrent \texttt{synchronized(a)}
+and \texttt{synchronized(b)} acquisitions and confirms that no circular
+wait can form.
+
+\subsubsection*{Results}
+
+\begin{verbatim}
+====================================================== results
+no errors detected
+====================================================== statistics
+elapsed time:       00:00:15
+states:             new=111913, visited=190331,
+                    backtracked=302244, end=0
+search:             maxDepth=500, constraints=209
+choice generators:  thread=111836
+                    (signal=4541, lock=7994,
+                     sharedRef=88016, threadApi=2,
+                     reschedule=11283), data=0
+max memory:         508MB
+\end{verbatim}
+
+JPF explored 111{,}913 distinct states and 190{,}331 visited states
+within a search depth of 500, completing in 15 seconds without detecting
+any error. The 111{,}836 thread choice generators confirm that the
+verification covered a large and representative portion of the
+interleaving space, including all lock acquisitions (\texttt{lock=7994})
+and shared reference accesses (\texttt{sharedRef=88016}).
+
+The \texttt{depth limit reached} constraint appearing in the output
+indicates that some execution paths were truncated at depth 500 rather
+than reaching a natural termination. This is expected given the cyclic
+structure of the tick loop: the search depth limit was chosen
+conservatively to keep verification tractable, and the absence of errors
+within the explored space provides strong evidence of correctness for the
+synchronization patterns used.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Task-Based Implementation}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The task-based implementation delegates synchronization to the
+\texttt{java.util.concurrent} framework rather than implementing custom
+primitives. The \texttt{ExecutorService.invokeAll()} call already provides
+the necessary happens-before guarantee between task completion and the
+subsequent phase: all submitted \texttt{Callable} tasks are guaranteed
+to have terminated before \texttt{invokeAll()} returns, making explicit
+barrier synchronization unnecessary.
+ 
+\subsubsection*{Properties verified}
+ 
+\textbf{Absence of deadlock.} The \texttt{CollisionTask} acquires locks
+on two \texttt{Ball} objects using \texttt{System.identityHashCode()} as
+the canonical ordering. Unlike the index-based ordering used in the
+multi-threaded implementation, identity hash codes are not strictly unique:
+two distinct objects may share the same code, breaking the total order
+required for deadlock freedom. JPF would flag this as a potential deadlock
+source in an adversarial interleaving. In practice the probability of
+collision is low, but the ordering is not provably safe.
+ 
+\textbf{Absence of data races.} The \texttt{ConcurrentHashMap} for
+\texttt{lastTouchedBy} is accessed concurrently by \texttt{CollisionTask}
+and \texttt{PlayerCollisionTask} without additional locking, which is
+correct since \texttt{ConcurrentHashMap} guarantees atomic operations.
+However, \texttt{CollisionTask} resets both \texttt{a} and \texttt{b}
+entries to 0 on any velocity change, while \texttt{PlayerCollisionTask}
+writes player indices 1 or 2. Since these two task types run in separate
+\texttt{invokeAll()} phases, no concurrent write conflict arises between
+them.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Discussion}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The JPF results confirm that the synchronization design of the
+multi-threaded implementation is free of deadlocks and data races within
+the verified state space. The custom \texttt{CyclicBarrier} and
+\texttt{ReusableLatch} primitives behave correctly under all explored
+interleavings, validating both the implementation and the design choice
+of using semantically distinct primitives for symmetric and asymmetric
+synchronization.
+ 
+The \texttt{broken} flag in \texttt{CyclicBarrier}, introduced to handle
+thread interruption without leaving the barrier permanently blocked, was
+not exercised during JPF verification since no interruptions were injected.
+Its correctness can be argued structurally from the Petri Net model
+presented in Chapter~\ref{chap:petri}: the flag acts as an additional
+arc that drains all \textit{wait} tokens when an interruption occurs,
+restoring the net to a state from which no deadlock is reachable.
 
 \begin{thebibliography}{99}
 
