@@ -179,9 +179,9 @@ Task-based parallelism in the Poool implementation must address several complexi
     \item \textbf{Collision Detection Complexity}:
     \begin{itemize}
         \item \texttt{CollisionTask} must verify all pairs $(i,j)$ with $i < j$ without duplication
-        \item Naive task decomposition (dividing range $[0, n)$) would create $O(n^2)$ pair computations
-        \item Current implementation partitions the range $[i_0, i_1)$ and checks each task's range against \textit{all} other balls: $\sum_{i=i_0}^{i_1} (n - i - 1)$ comparisons per task
-        \item Actual complexity per task is $O((i_1-i_0) \cdot n)$, not $O((i_1-i_0)^2)$
+        \item Naive task decomposition (dividing range $[0, n)$ into contiguous chunks) would create a \textit{triangular} workload: the task covering the lowest indices compares its balls against almost the entire list, while the task covering the highest indices does almost no work
+        \item Current implementation instead partitions indices \textit{by stride}: task $k$ (of $w = \min(n_{\text{workers}}, n)$ tasks) processes indices $k, k+w, k+2w, \dots$, so each task receives an interleaved mix of "heavy" (low-index) and "light" (high-index) balls, balancing the total number of comparisons across tasks
+        \item Total complexity remains $O(n^2)$ across all tasks, but the per-task share is now approximately $O(n^2/w)$ instead of being skewed toward the first task
     \end{itemize}
     
     \item \textbf{Memory Bandwidth Saturation}:
@@ -671,20 +671,20 @@ public Void call() {
 \end{itemize}
  
 \subsubsection*{CollisionTask (Parallel Worker)}
- 
+
 Implements \texttt{Callable<Void>} to resolve pairwise ball collisions:
- 
+
 \begin{itemize}
     \item \textbf{Input Parameters}:
     \begin{itemize}
         \item \texttt{List<Ball> balls}: Shared reference to all balls
-        \item \texttt{int from, int to}: Range $[from, to)$ of "first" balls in pairs
+        \item \texttt{int start, int step}: This task processes indices $start, start+step, start+2 \cdot step, \dots$ (interleaved/strided partition, not a contiguous range)
         \item \texttt{ConcurrentHashMap<Ball, Integer> lastTouchedBy}: Shared map of ball-to-player touches
     \end{itemize}
-    \item \textbf{Pair Enumeration}: For each ball $i \in [from, to)$, checks pairs $(i, j)$ where $j \in [i+1, n)$
+    \item \textbf{Pair Enumeration}: For each ball $i \in \{start, start+step, \dots\} \cap [0, n)$, checks pairs $(i, j)$ where $j \in [i+1, n)$. The strided assignment of $i$ balances the triangular workload across tasks (see \textit{Collision Detection Complexity} above)
     \item \textbf{Synchronization Protocol}:
     \begin{lstlisting}[language=Java, caption=Ordered Lock Acquisition in CollisionTask]
-for (int i = from; i < to; i++) {
+for (int i = start; i < n; i += step) {
     for (int j = i + 1; j < n; j++) {
         Ball a = balls.get(i);
         Ball b = balls.get(j);
@@ -715,30 +715,36 @@ Implements \texttt{Callable<Void>} to resolve player-ball collisions in parallel
     \item \textbf{Input Parameters}:
     \begin{itemize}
         \item \texttt{List<Ball> balls}: Shared reference to all balls
-        \item \texttt{int from, int to}: Range $[from, to)$ of "first" balls in pairs
+        \item \texttt{int from, int to}: Range $[from, to)$ of balls this task processes
+        \item \texttt{Ball player1, player2}: Shared references to \textit{both} player balls --- unlike \texttt{balls}, these are \textit{not} partitioned: every task instance receives the same \texttt{player1}/\texttt{player2} objects
         \item \texttt{ConcurrentHashMap<Ball, Integer> lastTouchedBy}: Shared map of ball-to-player touches
     \end{itemize}
-    \item \textbf{Pair Enumeration}: For each ball $i \in [from, to)$, checks pairs $(i, j)$ where $j \in [i+1, n)$
-    \item \textbf{Synchronization Protocol}:
-    \begin{lstlisting}[language=Java, caption=Ordered Lock Acquisition in PlayerCollisionTask]
+    \item \textbf{Collision Checks}: For each ball $i \in [from, to)$, resolves a collision against \texttt{player1} (if present) and against \texttt{player2} (if present). This is \textit{not} a pairwise ball-ball enumeration: each ball is only ever checked against the two fixed player objects
+    \item \textbf{Synchronization Protocol}: Because \texttt{player1} and \texttt{player2} are shared by \textit{every} concurrently running task, \texttt{Ball.resolveCollision()} on a player must be protected by a lock on that player object, otherwise concurrent tasks could race on the player's position/velocity fields. Each task acquires at most one player lock at a time (never both together), so this cannot introduce a lock-ordering cycle between \texttt{PlayerCollisionTask} instances:
+    \begin{lstlisting}[language=Java, caption=Per-Player Lock Acquisition in PlayerCollisionTask]
 for (int i = from; i < to; i++) {
             Ball b = balls.get(i);
 
-            // Collisione con player1
+            // Collisione con player1 - player1 e' condiviso da tutti i task,
+            // il lock serializza gli accessi concorrenti alla sua pos/vel
             if (player1 != null) {
-                V2d vPrima = b.getVel();
-                Ball.resolveCollision(player1, b);
-                if (!b.getVel().equals(vPrima)) {
-                    lastTouchedBy.put(b, 1);
+                synchronized (player1) {
+                    V2d vPrima = b.getVel();
+                    Ball.resolveCollision(player1, b);
+                    if (!b.getVel().equals(vPrima)) {
+                        lastTouchedBy.put(b, 1);
+                    }
                 }
             }
 
-            // Collisione con player2
+            // Collisione con player2 - stesso discorso di player1
             if (player2 != null) {
-                V2d vPrima = b.getVel();
-                Ball.resolveCollision(player2, b);
-                if (!b.getVel().equals(vPrima)) {
-                    lastTouchedBy.put(b, 2);
+                synchronized (player2) {
+                    V2d vPrima = b.getVel();
+                    Ball.resolveCollision(player2, b);
+                    if (!b.getVel().equals(vPrima)) {
+                        lastTouchedBy.put(b, 2);
+                    }
                 }
             }
         }
@@ -748,20 +754,37 @@ for (int i = from; i < to; i++) {
 \end{itemize}
  
 \subsubsection*{Task Decomposition}
-Task decomposition in the Poool implementation follows a \textbf{range-partitioning} strategy:
- 
+The \texttt{WorkerPool} does not use a single decomposition strategy for all
+task types: \texttt{BallUpdateTask} and \texttt{PlayerCollisionTask} use
+\textbf{contiguous range-partitioning}, while \texttt{CollisionTask} uses
+\textbf{strided (interleaved) partitioning} to counteract its triangular
+workload.
+
 \begin{itemize}
-    \item \textbf{Chunk Size Calculation}:
+    \item \textbf{Contiguous Chunking (\texttt{BallUpdateTask}, \texttt{PlayerCollisionTask})}:
     \begin{lstlisting}[language=Java, caption=Chunk Size Computation in WorkerPool]
 int nWorkers = Runtime.getRuntime().availableProcessors() * 2;
 int chunkSize = Math.max(1, n / nWorkers);
+for (int i = 0; i < n; i += chunkSize) {
+    tasks.add(new BallUpdateTask(balls, i, Math.min(i + chunkSize, n), dt, board));
+}
     \end{lstlisting}
     where $n$ is the number of balls. This ensures:
     \begin{itemize}
         \item If $n = 4500$ balls and $k = 8$ cores (16 workers), chunk size $\approx 281$ balls per task
         \item Minimum chunk size of 1 prevents empty tasks
         \item Factor of 2 overprovisioning creates more granularity for load balancing
+        \item Suitable here because the per-ball cost is $O(1)$ and uniform across the list, so equal-sized contiguous chunks already balance the load
     \end{itemize}
+
+    \item \textbf{Strided Partitioning (\texttt{CollisionTask})}:
+    \begin{lstlisting}[language=Java, caption=Strided Task Assignment for CollisionTask]
+int workers = Math.min(nWorkers, Math.max(1, n));
+for (int start = 0; start < workers; start++) {
+    tasks.add(new CollisionTask(balls, start, workers, lastTouchedBy));
+}
+    \end{lstlisting}
+    Unlike \texttt{BallUpdateTask}, the per-ball cost in \texttt{CollisionTask} is \textit{not} uniform: ball $i$ is compared against the $n - i - 1$ balls that follow it, so contiguous chunking would give the first task almost all the work and the last task almost none. Assigning index $i$ to task $i \bmod \text{workers}$ instead spreads low- and high-index balls evenly across all $w$ tasks, balancing the total number of comparisons per task.
 \end{itemize}
 
 \subsection{Synchronization Strategy}
@@ -802,7 +825,28 @@ CollisionTask uses nested synchronized blocks to prevent data races during colli
         \item In practice, contention is moderate since each task processes a different range of "first" balls
     \end{itemize}
 \end{itemize}
- 
+
+\subsubsection{Per-Player Locking in PlayerCollisionTask}
+\label{sec:player-locking}
+
+Unlike \texttt{CollisionTask}, where the two colliding balls always belong
+to the range-disjoint partition and are therefore never touched by two
+tasks at once, \texttt{PlayerCollisionTask} instances all share the
+\textit{same} \texttt{player1} and \texttt{player2} objects: every task
+covers a different range of small balls, but each of them may resolve a
+collision against either player. Without synchronization, two tasks
+resolving a collision against \texttt{player1} concurrently would race on
+its \texttt{pos}/\texttt{vel} fields, silently corrupting the player's
+state (lost updates, balls appearing to pass through the player). This is
+fixed by wrapping each \texttt{Ball.resolveCollision(player, b)} call in
+\texttt{synchronized(player)}:
+
+\begin{itemize}
+    \item \textbf{One Lock at a Time}: A task acquires the lock for \texttt{player1}, resolves the collision, releases it, then (independently) acquires the lock for \texttt{player2}. It never holds both locks simultaneously, so no lock-ordering scheme is needed to prevent deadlock between \texttt{PlayerCollisionTask} instances --- a circular wait cannot form when each thread holds at most one of the two contested locks at any time.
+    \item \textbf{Contention}: All tasks touching a given player in the same tick serialize on that player's lock; since there are only two player objects, this is a coarser-grained lock than the per-pair locking of \texttt{CollisionTask}, but the amount of work performed while holding it (a single \texttt{resolveCollision} call) is small.
+    \item \textbf{Interaction with the sequential phase}: \texttt{Board.checkHolesAndEndGame()} later calls \texttt{Ball.resolveCollision(player1, player2)} without any lock, but this happens strictly after \texttt{invokeAll().get()} returns for the player-collision phase, i.e.\ on the GameLoop thread with no worker task running concurrently, so no additional synchronization is required there.
+\end{itemize}
+
 \subsubsection{ConcurrentHashMap for Shared State}
  
 The \texttt{lastTouchedBy} map is a \texttt{ConcurrentHashMap<Ball, Integer>} to allow concurrent updates from multiple CollisionTask instances:
@@ -1363,6 +1407,21 @@ entries to 0 on any velocity change, while \texttt{PlayerCollisionTask}
 writes player indices 1 or 2. Since these two task types run in separate
 \texttt{invokeAll()} phases, no concurrent write conflict arises between
 them.
+
+\textbf{Player-object race (identified and fixed).} An earlier version of
+\texttt{PlayerCollisionTask} called \texttt{Ball.resolveCollision(player1, b)}
+and \texttt{Ball.resolveCollision(player2, b)} with no synchronization at
+all. Since \texttt{player1}/\texttt{player2} are shared, unpartitioned
+objects referenced by \textit{every} task instance in the phase (unlike the
+balls in \texttt{balls}, which are exclusive to one task's range), two
+tasks resolving a collision against the same player concurrently could
+race on its \texttt{pos}/\texttt{vel} fields --- a genuine JPF-detectable
+data race, in contrast to the \texttt{lastTouchedBy} accesses above. This
+was fixed by wrapping each \texttt{resolveCollision} call in
+\texttt{synchronized(player1)} / \texttt{synchronized(player2)}
+respectively (\S\ref{sec:player-locking}). Because a task never holds both
+player locks at once, this addition does not introduce any deadlock risk
+symmetric to the one discussed for \texttt{CollisionTask} above.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \subsection{Discussion}
