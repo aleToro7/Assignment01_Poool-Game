@@ -11,8 +11,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * Ogni task elabora un range di palle, verificando collisioni con player1 e player2.
  * 
  * Thread-safety:
- * - Ogni task legge da palle diverse (range [from, to))
- * - Ogni task scrive a palle diverse (non race condition)
+ * - Ogni task legge/scrive palle diverse (range [from, to)), nessuna race su quelle
+ * - player1 e player2 sono invece condivisi da TUTTI i task: l'accesso a ciascuno
+ *   è protetto da synchronized(player) per evitare race condition sulle loro
+ *   posizioni/velocità (mai entrambi i lock insieme -> nessun rischio di deadlock)
  * - lastTouchedBy è ConcurrentHashMap (thread-safe)
  */
 public class PlayerCollisionTask implements Callable<Void> {
@@ -40,21 +42,26 @@ public class PlayerCollisionTask implements Callable<Void> {
         for (int i = from; i < to; i++) {
             Ball b = balls.get(i);
 
-            // Collisione con player1
+            // Collisione con player1 - player1 è condiviso da tutti i task,
+            // il lock serializza gli accessi concorrenti alla sua pos/vel
             if (player1 != null) {
-                V2d vPrima = b.getVel();
-                Ball.resolveCollision(player1, b);
-                if (!b.getVel().equals(vPrima)) {
-                    lastTouchedBy.put(b, 1);
+                synchronized (player1) {
+                    V2d vPrima = b.getVel();
+                    Ball.resolveCollision(player1, b);
+                    if (!b.getVel().equals(vPrima)) {
+                        lastTouchedBy.put(b, 1);
+                    }
                 }
             }
 
-            // Collisione con player2
+            // Collisione con player2 - stesso discorso di player1
             if (player2 != null) {
-                V2d vPrima = b.getVel();
-                Ball.resolveCollision(player2, b);
-                if (!b.getVel().equals(vPrima)) {
-                    lastTouchedBy.put(b, 2);
+                synchronized (player2) {
+                    V2d vPrima = b.getVel();
+                    Ball.resolveCollision(player2, b);
+                    if (!b.getVel().equals(vPrima)) {
+                        lastTouchedBy.put(b, 2);
+                    }
                 }
             }
         }

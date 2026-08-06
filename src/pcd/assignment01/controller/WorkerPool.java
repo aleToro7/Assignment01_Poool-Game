@@ -45,11 +45,14 @@ public class WorkerPool {
             throws InterruptedException, ExecutionException {
 
         int n = balls.size();
-        int chunkSize = Math.max(1, n / nWorkers);
+        // Il lavoro i-vs-j è triangolare: si usa una suddivisione a passo
+        // (interleaved) invece che a range contigui, così ogni task riceve
+        // un mix bilanciato di indici "pesanti" e "leggeri".
+        int workers = Math.min(nWorkers, Math.max(1, n));
         var tasks = new ArrayList<CollisionTask>();
 
-        for (int i = 0; i < n; i += chunkSize) {
-            tasks.add(new CollisionTask(balls, i, Math.min(i + chunkSize, n), lastTouchedBy));
+        for (int start = 0; start < workers; start++) {
+            tasks.add(new CollisionTask(balls, start, workers, lastTouchedBy));
         }
 
         List<Future<Void>> futures = executor.invokeAll(tasks);
