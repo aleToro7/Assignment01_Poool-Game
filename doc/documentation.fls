@@ -2,7 +2,7 @@ PWD /Users/Shared/Files From d.localized/Unibo/Magistrale/Sviluppo dei sistemi s
 INPUT /usr/local/texlive/2026/texmf.cnf
 INPUT /usr/local/texlive/2026/texmf-dist/web2c/texmf.cnf
 INPUT /usr/local/texlive/2026/texmf-var/web2c/pdftex/pdflatex.fmt
-INPUT documentation.tex
+INPUT /Users/Shared/Files From d.localized/Unibo/Magistrale/Sviluppo dei sistemi software/Programmazione Concorrente e Distribuita/Assigments/Assignment01_Poool-Game/doc/documentation.tex
 OUTPUT documentation.log
 INPUT /usr/local/texlive/2026/texmf-dist/tex/latex/base/article.cls
 INPUT /usr/local/texlive/2026/texmf-dist/tex/latex/base/article.cls
