@@ -3,6 +3,7 @@ package pcd.assignment01.controller;
 import pcd.assignment01.model.Ball;
 import pcd.assignment01.model.Board;
 import pcd.assignment01.util.CyclicBarrier;
+import pcd.assignment01.util.ReusableLatch;
 import pcd.assignment01.util.SpatialGrid;
 
 import java.util.HashMap;
@@ -14,28 +15,25 @@ import java.util.Map;
  * Ad ogni tick esegue tre fasi sulla propria partizione di palline:
  *
  *   Fase 1 — aggiorna le posizioni (updateState su ogni pallina)
- *             poi aspetta alla barrierPositions
+ *             poi aspetta alla barrierPositions (sincronizzazione SIMMETRICA:
+ *             tutti i thread si aspettano a vicenda)
  *
- *   Fase G — solo Worker-0 (isGridBuilder==true): costruisce la SpatialGrid
- *             dalle posizioni aggiornate in fase 1.
- *             Gli altri worker aspettano alla barrierGrid senza fare nulla.
- *             Una volta che Worker-0 chiama barrierGrid.await(), tutti ripartono.
+ *   Fase G — solo Worker-0 (isGridBuilder==true): costruisce la SpatialGrid.
+ *             Gli altri chiamano gridLatch.await() e si bloccano.
+ *             Worker-0 chiama gridLatch.open() quando ha finito.
+ *             Sincronizzazione ASIMMETRICA: un produttore sblocca N consumatori.
  *
- *   Fase 2 — ogni worker risolve le collisioni ball-ball usando la griglia:
- *             per ogni pallina della partizione recupera i candidati dalle
- *             9 celle vicine (O(1) per pallina invece di O(n)), filtrandosi
- *             con l'indice canonico per processare ogni coppia una sola volta.
- *             Lock in ordine canonico per evitare deadlock.
- *             poi aspetta alla barrierCollisions.
+ *   Fase 2 — ogni worker risolve le collisioni ball-ball usando la griglia,
+ *             poi aspetta alla barrierCollisions (SIMMETRICA).
  */
 public class WorkerThread extends Thread {
 
     private final Board         board;
     private final CyclicBarrier barrierPositions;
-    private final CyclicBarrier barrierGrid;        // separa build griglia da fase 2
+    private final ReusableLatch gridLatch;          // sostituisce barrierGrid
     private final CyclicBarrier barrierCollisions;
     private final SpatialGrid   grid;
-    private final boolean       isGridBuilder;      // true solo per Worker-0
+    private final boolean       isGridBuilder;
 
     private volatile List<Ball>       partition;
     private volatile List<Ball>       allBalls;
@@ -58,14 +56,14 @@ public class WorkerThread extends Thread {
      */
     public WorkerThread(int id, Board board,
                         CyclicBarrier barrierPositions,
-                        CyclicBarrier barrierGrid,
+                        ReusableLatch gridLatch,
                         CyclicBarrier barrierCollisions,
                         SpatialGrid grid) {
         super("WorkerThread-" + id);
         setDaemon(true);
         this.board              = board;
         this.barrierPositions   = barrierPositions;
-        this.barrierGrid        = barrierGrid;
+        this.gridLatch          = gridLatch;
         this.barrierCollisions  = barrierCollisions;
         this.grid               = grid;
         this.isGridBuilder      = (id == 0);
@@ -135,20 +133,21 @@ public class WorkerThread extends Thread {
                 return;
             }
 
-            // ---- FASE G: costruzione griglia (solo Worker-0) ----
-            // Worker-0 ricostruisce la griglia sulle posizioni appena aggiornate.
-            // Gli altri worker chiamano barrierGrid.await() immediatamente.
-            // Quando barrierGrid scatta, la griglia è consistente e leggibile
-            // da tutti i worker in fase 2 senza ulteriore sincronizzazione
-            // (la barrier stabilisce il happens-before necessario).
+            // ---- FASE G: costruzione griglia ----
+            // Sincronizzazione ASIMMETRICA con ReusableLatch:
+            // Worker-0 produce la griglia e chiama open(),
+            // tutti gli altri chiamano await() e si bloccano finché
+            // la griglia non è pronta. Semanticamente più corretto di
+            // una CyclicBarrier, che implicherebbe lavoro parallelo.
             if (isGridBuilder) {
                 grid.build(allBalls);
-            }
-
-            try { barrierGrid.await(); }
-            catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
+                gridLatch.open();   // sblocca tutti i consumatori
+            } else {
+                try { gridLatch.await(); }
+                catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
             }
 
             // ---- FASE 2: collisioni ball-ball con SpatialGrid ----

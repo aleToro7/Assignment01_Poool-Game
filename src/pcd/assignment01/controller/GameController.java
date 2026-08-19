@@ -4,6 +4,7 @@ import pcd.assignment01.model.Ball;
 import pcd.assignment01.model.Board;
 import pcd.assignment01.model.Board.Winner;
 import pcd.assignment01.util.CyclicBarrier;
+import pcd.assignment01.util.ReusableLatch;
 import pcd.assignment01.util.SpatialGrid;
 import pcd.assignment01.view.View;
 import pcd.assignment01.view.ViewModel;
@@ -39,25 +40,20 @@ public class GameController {
     private final BotController botController;
 
     // Worker pool
-    private final int               nWorkers;
+    private final int                nWorkers;
     private final List<WorkerThread> workers;
-    private final CyclicBarrier     barrierPositions;
-    private final CyclicBarrier     barrierGrid;       // nuovo: separa build griglia
-    private final CyclicBarrier     barrierCollisions;
-    private final SpatialGrid       grid;
+    private final CyclicBarrier      barrierPositions;
+    private final ReusableLatch      gridLatch;         // asimmetrico: Worker-0 → tutti
+    private final CyclicBarrier      barrierCollisions;
+    private final SpatialGrid        grid;
 
     private volatile boolean running = false;
     private Thread updateThread;
 
-    // Cache partizioni: ricalcolate solo quando cambia il numero di palline
+    // Cache partizioni
     private List<Ball>       cachedBalls;
     private List<List<Ball>> cachedPartitions;
 
-    /**
-     * @param nWorkers numero di WorkerThread (availableProcessors()+1 per convenzione).
-     *                 Le CyclicBarrier vengono costruite con parties = nWorkers+1
-     *                 per includere anche il GameController stesso.
-     */
     public GameController(Board board, ViewModel viewModel, View view, int nWorkers) {
         this.board         = board;
         this.viewModel     = viewModel;
@@ -65,20 +61,19 @@ public class GameController {
         this.botController = new BotController(board);
         this.nWorkers      = nWorkers;
 
-        // parties = nWorkers + 1 (GameController partecipa a tutte le barrier)
+        // Due CyclicBarrier per sincronizzazione SIMMETRICA (tutti aspettano tutti)
         this.barrierPositions  = new CyclicBarrier(nWorkers + 1);
-        this.barrierGrid       = new CyclicBarrier(nWorkers + 1);
         this.barrierCollisions = new CyclicBarrier(nWorkers + 1);
 
-        // La griglia viene costruita con i parametri di LargeBoardConf/MassiveBoardConf:
-        // ballRadius = 0.01 per le palline piccole.
-        // getBounds() è chiamato qui dopo board.init() — il campo è già inizializzato.
+        // ReusableLatch per sincronizzazione ASIMMETRICA (Worker-0 → tutti gli altri)
+        this.gridLatch = new ReusableLatch();
+
         this.grid = new SpatialGrid(board.getBounds(), 0.01);
 
         this.workers = new ArrayList<>(nWorkers);
         for (int i = 0; i < nWorkers; i++) {
             workers.add(new WorkerThread(i, board,
-                    barrierPositions, barrierGrid, barrierCollisions, grid));
+                    barrierPositions, gridLatch, barrierCollisions, grid));
         }
     }
 
@@ -210,6 +205,11 @@ public class GameController {
             }
         }
 
+        // Reset del latch PRIMA di avviare i worker: garantisce che sia chiuso
+        // quando i worker entreranno in fase G. Sicuro perché nessun worker
+        // è ancora attivo a questo punto del tick.
+        gridLatch.reset();
+
         // Segnala inizio tick a tutti i worker, passando l'indice di partenza.
         // Se le partizioni sono meno dei worker (poche palline), i worker extra
         // ricevono una lista vuota: partecipano comunque alle barrier senza fare lavoro.
@@ -225,22 +225,14 @@ public class GameController {
         // GameController partecipa alla barrier di fine fase 1 (posizioni)
         try { barrierPositions.await(); }
         catch (InterruptedException e) {
-            // Se il GC viene interrotto, i worker sono già in await() sulla stessa barrier.
-            // Dobbiamo svegliarli prima di uscire, altrimenti restano bloccati per sempre.
             workers.forEach(WorkerThread::stopWorker);
             Thread.currentThread().interrupt();
             return;
         }
 
-        // GameController partecipa a barrierGrid come N+1-esimo party.
-        // Worker-0 sta costruendo la griglia; il GameController non fa nulla
-        // in questa fase ma deve chiamare await() per far scattare la barrier.
-        try { barrierGrid.await(); }
-        catch (InterruptedException e) {
-            workers.forEach(WorkerThread::stopWorker);
-            Thread.currentThread().interrupt();
-            return;
-        }
+        // Fase G: il GameController NON partecipa al gridLatch —
+        // è una sincronizzazione asimmetrica tra Worker-0 e gli altri worker.
+        // Il GameController attende direttamente barrierCollisions.
 
         // GameController partecipa alla barrier di fine fase 2 (collisioni ball-ball)
         try { barrierCollisions.await(); }
